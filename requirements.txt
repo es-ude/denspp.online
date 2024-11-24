@@ -1,0 +1,4 @@
+fxpmath==0.4.9
+numpy==1.26.4
+pybind11==2.13.6
+PyYAML==6.0.2

@@ -1,0 +1,16 @@
+n_channel: 8
+sampling_rate: 1000
+do_plot: true
+use_hw: true
+use_lsl: true
+stream_name: "Explore_8573_ExG"
+sim_data_path: "/path/to/data"
+save_recording: false
+save_data_path: "/data/destination/path"
+
+filter:
+  class: "fir"
+  order: 21
+  lowcut: 0.1
+  highcut: 30.0
+  type: "bandpass"

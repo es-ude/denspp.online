@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.29)
+project(sim)
+
+set(CMAKE_CXX_STANDARD 20)
+
+find_package(LSL REQUIRED)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MATIO REQUIRED matio)
+find_package(yaml-cpp REQUIRED)
+
+link_directories(/usr/lib/x86_64-linux-gnu/hdf5/openmpi)
+add_executable(sim main.cpp)
+
+target_link_libraries(sim PRIVATE LSL::lsl ${MATIO_LIBRARIES} hdf5 z yaml-cpp curl)
+target_include_directories(sim PRIVATE ${MATIO_INCLUDE_DIRS})
