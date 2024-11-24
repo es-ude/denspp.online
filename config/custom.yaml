@@ -4,7 +4,7 @@ do_plot: true
 use_hw: false
 use_lsl: true
 stream_name: "BioSemi"
-sim_data_path: "/path/to/data"
+sim_data_path: "data/sim_data/utah_dataset_snippet.mat"
 save_recording: false
 save_data_path: "/data/destination/path"
 use_layout: true

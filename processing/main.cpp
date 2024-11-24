@@ -57,7 +57,7 @@ Config readConfig(const std::string& filename) {
 
 
 int main(int argc,char* argv[]) {
-    std::string config_file_path = "config/default.yaml";
+    std::string config_file_path = "../../config/default.yaml";
     //handle cmd line args:
     if (argc >= 2) {
         config_file_path = std::string(argv[1]);

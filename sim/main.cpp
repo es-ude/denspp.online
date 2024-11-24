@@ -1,5 +1,4 @@
-// Example program to demonstrate how to send a multi-channel time series to LSL in C++
-#include <lsl_cpp.h>  // LSL C++ API
+#include <lsl_cpp.h>
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -56,7 +55,8 @@ Config readConfig(const std::string& filename) {
 
 
 int main(int argc, char* argv[]) {
-    std::string config_file_path = "config/default.yaml";
+    std::string config_file_path = "../../config/default.yaml";
+
     //handle cmd line args:
     if (argc >= 2) {
         config_file_path = std::string(argv[1]);
@@ -75,12 +75,13 @@ int main(int argc, char* argv[]) {
 
     std::string name = cfg.stream_name;  // Stream name
     std::string type = "EEG";  // Stream type
-    char path[] = "/media/k-dawg/Volume/PraxisProjektRohdaten/rps_20131016-115158-NSP1-001_MERGED.mat";  // File path to data
-
+    std::string path = cfg.sim_data_path;  // File path to sim data
+    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
 
     // Open the .mat file
-    mat_t *matfp = Mat_Open(path, MAT_ACC_RDONLY);
+    mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
     if (!matfp) {
+        std::cout << path.c_str() << std::endl;
         std::cerr << "Error: Could not open .mat file." << std::endl;
         return 1;
     }
