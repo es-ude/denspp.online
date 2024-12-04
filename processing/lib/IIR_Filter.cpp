@@ -93,7 +93,7 @@ double IIR_Filter::calculateOutput(double data_in) {
         output -= denominator[i] * taps[i];
     }
 
-    // output /= denominator[0];
+    output /= denominator[0];
 
     return output;
 }

@@ -117,10 +117,15 @@ void MainWindow::realtimeDataSlot()
             plot->graph(0)->addData(timestamps[i], samples[i][2*channel]);
             plot->graph(1)->addData(timestamps[i],samples[i][2*channel+1]);
 
-            if (samples_received % s_rate == 0) {
+            if (samples_received % s_rate == 0) {  // every second
+
                 double sampleValue = samples[i][2*channel];
-                if (sampleValue < minVal) minVal = sampleValue;
+                if (sampleValue < minVal) minVal = sampleValue;  // update plot limits
                 if (sampleValue > maxVal) maxVal = sampleValue;
+
+                plot->graph(0)->data()->removeBefore(timestamps[i] - 5);  // remove old datapoints
+                plot->graph(1)->data()->removeBefore(timestamps[i] - 5);
+
             }
         }
     }

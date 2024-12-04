@@ -1,18 +1,20 @@
 n_channel: 96
-sampling_rate: 3000
-do_plot: false
+sampling_rate: 30000
+do_plot: true
 use_hw: false
 use_lsl: true
 stream_name: "BioSemi"
-sim_data_path: "/path/to/data"
-save_recording: false
-save_data_path: "/data/destination/path"
+sim_data_path: "/media/k-dawg/Volume/PraxisProjektRohdaten/rps_20131016-115158-NSP1-001_MERGED.mat"
 use_layout: true
-mapping_path: "/config/layout_mea/Mapping_Utah.csv"
-
+mapping_path: "config/layout_mea/Mapping_Utah.csv"
 filter:
-  class: "fir"
+  class: "iir"
   order: 21
-  lowcut: 100.0
-  highcut: 1150.0
+  lowcut: 30.0
+  highcut: 9000.0
   type: "bandpass"
+recording:
+  do_record: false
+  duration: 20
+  path: "data/save_data/"
+  filename: "test.xdf"

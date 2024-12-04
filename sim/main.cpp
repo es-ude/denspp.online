@@ -4,7 +4,10 @@
 #include <thread>
 #include <chrono>
 #include <matio.h>
+#include <xdf.h>
+
 #include <cstdint>
+#include <queue>
 #include <yaml-cpp/yaml.h>
 
 struct FilterConfig {
@@ -15,6 +18,13 @@ struct FilterConfig {
     std::string type;
 };
 
+struct RecordConfig {
+    bool do_record;
+    int duration;
+    std::string path;
+    std::string file_name;
+};
+
 struct Config {
     int n_channel;
     int sampling_rate;
@@ -23,9 +33,8 @@ struct Config {
     bool use_lsl;
     std::string stream_name;
     std::string sim_data_path;
-    bool save_recording;
-    std::string save_data_path;
     FilterConfig filter;
+    RecordConfig recording;
 };
 
 Config readConfig(const std::string& filename) {
@@ -39,8 +48,6 @@ Config readConfig(const std::string& filename) {
     cfg.use_lsl = config["use_lsl"].as<bool>();
     cfg.stream_name = config["stream_name"].as<std::string>();
     cfg.sim_data_path = config["sim_data_path"].as<std::string>();
-    cfg.save_recording = config["save_recording"].as<bool>();
-    cfg.save_data_path = config["save_data_path"].as<std::string>();
 
     // Load filter settings
     YAML::Node filter = config["filter"];
@@ -50,12 +57,19 @@ Config readConfig(const std::string& filename) {
     cfg.filter.highcut = filter["highcut"].as<double>();
     cfg.filter.type = filter["type"].as<std::string>();
 
+    // Load recording settings;
+    YAML::Node recording = config["recording"];
+    cfg.recording.do_record = recording["do_record"].as<bool>();
+    cfg.recording.duration = recording["duration"].as<int>();
+    cfg.recording.path = recording["path"].as<std::string>();
+    cfg.recording.file_name = recording["filename"].as<std::string>();
+
     return cfg;
 }
 
 
 int main(int argc, char* argv[]) {
-    std::string config_file_path = "../../config/default.yaml";
+    std::string config_file_path = "../../config/layout_test.yaml";
 
     //handle cmd line args:
     if (argc >= 2) {
@@ -76,7 +90,7 @@ int main(int argc, char* argv[]) {
     std::string name = cfg.stream_name;  // Stream name
     std::string type = "EEG";  // Stream type
     std::string path = cfg.sim_data_path;  // File path to sim data
-    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
 
     // Open the .mat file
     mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
@@ -131,6 +145,8 @@ int main(int argc, char* argv[]) {
 
     auto start = std::chrono::high_resolution_clock::now();
 
+    long global_duration = 1000000;  // TRASH VARIABLE FOR PROOF OF CONCEPT
+
     while (true) {
         // Prepare sample (vector of ints)
         for(int j = 0; j < cfg.n_channel; j++) {
@@ -141,20 +157,42 @@ int main(int argc, char* argv[]) {
 
         ts += step_size; // down sampling of utah array data according to new sampling rate
         if((ts/step_size) % cfg.sampling_rate == 0) {
-            std::cout<< "S: Time passed: " << (ts/step_size)/(cfg.sampling_rate) << "s" << std::endl;
-
             auto end = std::chrono::high_resolution_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
             start = end;
-            std::cout << "Sim second duration: "<< duration.count() << std::endl;
 
+            std::cout<< "S: Time on dataset passed: " << (ts/step_size)/(cfg.sampling_rate) << "s (computed in: " << duration.count() << "us)" << std::endl;
+            // usleep(1000000);//sleep_duration); // wir sleepen lieber ne sekunde nach s_rate samples anstelle von sampleweise
+            // liegt daran, dass zu kleine schlafintervalle schwer zu realisieren sind
+            global_duration = duration.count();
         }
+
+        // idle / sleep logic:
+        if (cfg.sampling_rate <= 10000) {  // sleeps after every sample (only feasible for lower sampling rates
+            // recalculate sleeping duration every second:
+            if((ts/step_size) % cfg.sampling_rate == 0){
+                sleep_duration += 0.0005 * ((1000000 - global_duration));  // PID Controller without I and D :^)
+            }
+            usleep(sleep_duration);
+        }
+        else{
+            if((ts/step_size) % (cfg.sampling_rate/1000) == 0) { // sleeps every 30 samples
+                // recalculate sleeping duration every second:
+                if((ts/step_size) % cfg.sampling_rate == 0){
+                    sleep_duration += 0.0005 * ((1000000 - global_duration));
+                }
+                usleep(sleep_duration);
+            }
+        }
+
+
         if (ts >= numRows) {
             std::cout << ts << std::endl;
             ts=0;
         }
         // Sleep for the duration of the sampling period (adjusted for 2 kHz = 1/2000 sec -> 5 milli
-        usleep(sleep_duration);
+        //usleep(0);
+
     }
 
     return 0;
