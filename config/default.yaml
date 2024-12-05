@@ -1,18 +1,20 @@
-n_channel: 34
-sampling_rate: 250
+n_channel: 32
+sampling_rate: 3000
 do_plot: true
 use_hw: false
 use_lsl: true
 stream_name: "BioSemi"
 sim_data_path: "data/sim_data/utah_dataset_snippet.mat"
-save_recording: false
-save_data_path: "/data/destination/path"
 use_layout: true
 mapping_path: "config/layout_mea/Mapping_Utah.csv"
-
 filter:
-  class: "fir"
-  order: 21
-  lowcut: .1
+  class: "iir"
+  order: 4
+  lowcut: 0.1
   highcut: 30.0
   type: "bandpass"
+recording:
+  do_record: false
+  duration: 10
+  path: ""
+  filename: ""

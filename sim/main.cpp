@@ -7,6 +7,7 @@
 #include <xdf.h>
 
 #include <cstdint>
+#include <fstream>
 #include <queue>
 #include <yaml-cpp/yaml.h>
 
@@ -67,6 +68,26 @@ Config readConfig(const std::string& filename) {
     return cfg;
 }
 
+bool checkFileType(const std::string &filepath) {
+    // true: file ends on .xdf, false: file ends on .mat
+
+    size_t dotPos = filepath.rfind('.');
+    if (dotPos == std::string::npos) {
+        throw std::runtime_error("No dot found :c"); //
+    }
+    std::string extension = filepath.substr(dotPos + 1);
+    // Convert to lowercase for case-insensitive comparison
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+    if (extension == "mat") {
+        return false;
+    } else if (extension == "xdf") {
+        return true;
+    } else {
+        throw std::runtime_error("Unsupported file extension");
+    }
+}
+
 
 int main(int argc, char* argv[]) {
     std::string config_file_path = "../../config/layout_test.yaml";
@@ -90,41 +111,80 @@ int main(int argc, char* argv[]) {
     std::string name = cfg.stream_name;  // Stream name
     std::string type = "EEG";  // Stream type
     std::string path = cfg.sim_data_path;  // File path to sim data
-    path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    //path = "../../data/save_data/test.xdf";
 
-    // Open the .mat file
-    mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
-    if (!matfp) {
-        std::cout << path.c_str() << std::endl;
-        std::cerr << "Error: Could not open .mat file." << std::endl;
-        return 1;
+    // Check if provided Data File is in .mat or .xdf format:
+    bool isXdf = checkFileType(path);
+    std::cout << isXdf << std::endl;
+    int16_t* data;
+    size_t numRows;
+
+    if (!isXdf) {
+        // MATFILE ROUTINE
+        mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
+        if (!matfp) {
+            std::cout << path.c_str() << std::endl;
+            std::cerr << "Error: Could not open .mat file." << std::endl;
+            return 1;
+        }
+
+        // Read the 'rawdata' structure from the .mat file
+        matvar_t *raw_data = Mat_VarRead(matfp, "rawdata");
+        if (!raw_data) {
+            std::cerr << "Error: Could not read 'rawdata' from .mat file." << std::endl;
+            Mat_Close(matfp);
+            return 1;
+        }
+
+        matvar_t* spikeVar = Mat_VarGetStructFieldByName(raw_data, "spike", 0);
+
+        if (!spikeVar) {
+            std::cerr << "Error: Could not find 'spike' matrix in the file." << std::endl;
+            return 1;
+        }
+
+        size_t* dims = spikeVar->dims;
+        numRows = dims[0];
+        size_t numCols = dims[1];
+
+        std::cout << "'spike' matrix dimensions: " << numRows << " x " << numCols << std::endl;
+        data = static_cast<int16_t*>(spikeVar->data);
     }
 
-    // Read the 'rawdata' structure from the .mat file
-    matvar_t *raw_data = Mat_VarRead(matfp, "rawdata");
-    if (!raw_data) {
-        std::cerr << "Error: Could not read 'rawdata' from .mat file." << std::endl;
-        Mat_Close(matfp);
-        return 1;
+    std::vector<std::vector<std::variant<int,float,double,long, std::__cxx11::basic_string<char>>>> samples;
+    if(isXdf) {
+        // XDFFILE routine
+        try {
+            // Load the XDF file
+            Xdf xdf;
+            xdf.load_xdf(path);
+
+            samples = xdf.streams[0].time_series;
+            //auto timestamp = xdf.streams[0].time_stamps;   // Timestamps for all Channels
+
+
+            /*for(int ts=0; ts < 10; ts++){
+                for (int channel=0; channel<96; channel++) {
+                    trouble[channel] = (std::get<double>(samples[channel][ts]));
+                }
+                std::cout << "ts: " << ts << std::endl;
+                std::cout << "values: ";
+                for(auto &value: trouble) std::cout << value << " ";
+                std::cout << std::endl;
+            }*/
+            numRows = samples[0].size();
+
+
+        } catch (const std::exception &ex) {
+            std::cerr << "Error: " << ex.what() << "\n";
+            return 1;
+        }
     }
 
-    matvar_t* spikeVar = Mat_VarGetStructFieldByName(raw_data, "spike", 0);
-
-    if (!spikeVar) {
-        std::cerr << "Error: Could not find 'spike' matrix in the file." << std::endl;
-        return 1;
-    }
-
-    size_t* dims = spikeVar->dims;
-    size_t numRows = dims[0];
-    size_t numCols = dims[1];
-
-    std::cout << "'spike' matrix dimensions: " << numRows << " x " << numCols << std::endl;
-
-    auto* data = static_cast<int16_t*>(spikeVar->data);
 
     // prints time step 2 of Electrode 11
-    std::cout << data[2 + numRows * 11] << std::endl;
+    //std::cout << data[2 + numRows * 11] << std::endl;
 
     // Create LSL stream info
     lsl::stream_info info(cfg.stream_name, type, cfg.n_channel, cfg.sampling_rate, lsl::cf_double64, "myuid34234");
@@ -136,7 +196,6 @@ int main(int argc, char* argv[]) {
 
     std::vector sample(cfg.n_channel,0);
     int ts = 0;
-
     // calculate step size, original data is recorded at 30khz
     int step_size = 30000/cfg.sampling_rate;
     double sleep_duration = 1.0/cfg.sampling_rate * 1000000.0 * 0.85;
@@ -148,11 +207,21 @@ int main(int argc, char* argv[]) {
     long global_duration = 1000000;  // TRASH VARIABLE FOR PROOF OF CONCEPT
 
     while (true) {
+
         // Prepare sample (vector of ints)
-        for(int j = 0; j < cfg.n_channel; j++) {
-            sample[j] = data[numRows*j + ts];
+
+        if(!isXdf){
+            for(int j = 0; j < cfg.n_channel; j++) {
+                sample[j] = data[numRows*j + ts];
+            }
         }
-        // Push the sample to the outlet
+        if(isXdf) {
+            for(int j = 0; j < cfg.n_channel; j++) {
+                sample[j] = int(std::get<double>(samples[j][ts]));
+            }
+        }
+
+
         outlet.push_sample(sample);
 
         ts += step_size; // down sampling of utah array data according to new sampling rate
@@ -162,8 +231,6 @@ int main(int argc, char* argv[]) {
             start = end;
 
             std::cout<< "S: Time on dataset passed: " << (ts/step_size)/(cfg.sampling_rate) << "s (computed in: " << duration.count() << "us)" << std::endl;
-            // usleep(1000000);//sleep_duration); // wir sleepen lieber ne sekunde nach s_rate samples anstelle von sampleweise
-            // liegt daran, dass zu kleine schlafintervalle schwer zu realisieren sind
             global_duration = duration.count();
         }
 
@@ -176,7 +243,7 @@ int main(int argc, char* argv[]) {
             usleep(sleep_duration);
         }
         else{
-            if((ts/step_size) % (cfg.sampling_rate/1000) == 0) { // sleeps every 30 samples
+            if((ts/step_size) % (cfg.sampling_rate/1000) == 0) { // sleeps every 30 samples (for 30khz, 20 samples for 20khz...)
                 // recalculate sleeping duration every second:
                 if((ts/step_size) % cfg.sampling_rate == 0){
                     sleep_duration += 0.0005 * ((1000000 - global_duration));
@@ -185,14 +252,11 @@ int main(int argc, char* argv[]) {
             }
         }
 
-
+        // loop the dataset
         if (ts >= numRows) {
             std::cout << ts << std::endl;
             ts=0;
         }
-        // Sleep for the duration of the sampling period (adjusted for 2 kHz = 1/2000 sec -> 5 milli
-        //usleep(0);
-
     }
 
     return 0;

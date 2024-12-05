@@ -84,7 +84,7 @@ int main(int argc,char* argv[]) {
         std::cerr << "Error parsing YAML file: " << e.what() << std::endl;
         return 1;
     }
-    cfg.recording.path = "../../data/save_data";
+    //cfg.recording.path = "../../data/save_data";
 
     // create the outlet for the filtered DataStream:
     std::string name = "BioSemiFiltered";  // Stream name for filtered data
