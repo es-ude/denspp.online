@@ -4,7 +4,7 @@ do_plot: true
 use_hw: false
 use_lsl: true
 stream_name: "BioSemi"
-sim_data_path: "data/save_data/test2.xdf"
+sim_data_path: "data/save_data/test3.xdf"
 use_layout: true
 mapping_path: "config/layout_mea/Mapping_Utah.csv"
 filter:

@@ -10,7 +10,7 @@ mapping_path: "config/layout_mea/Mapping_Utah.csv"
 filter:
   class: "iir"
   order: 4
-  lowcut: 10.0
+  lowcut: 1.0
   highcut: 9000.0
   type: "bandpass"
 recording:

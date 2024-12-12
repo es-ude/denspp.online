@@ -68,7 +68,7 @@ Config readConfig(const std::string& filename) {
     return cfg;
 }
 
-bool checkFileType(const std::string &filepath) {
+bool checkFileType(const std::string& filepath) {
     // true: file ends on .xdf, false: file ends on .mat
 
     size_t dotPos = filepath.rfind('.');
@@ -88,12 +88,29 @@ bool checkFileType(const std::string &filepath) {
     }
 }
 
+matvar_t* handle_mat_file(mat_t* matfile) {
+    if (!matfile) {
+        throw std::runtime_error("Could not open .mat file");
+    }
+
+    matvar_t *raw_data = Mat_VarRead(matfile, "rawdata");
+    if (!raw_data) {
+        throw std::runtime_error("Could not open .mat file");
+    }
+
+    matvar_t *spikeVar = Mat_VarGetStructFieldByName(raw_data, "spike", 0);
+    if (!spikeVar) {
+        throw std::runtime_error("Could not open .mat file");
+    }
+    return spikeVar;
+}
+
 
 int main(int argc, char* argv[]) {
-    std::string config_file_path = "../../config/layout_test.yaml";
+    std::string config_file_path = "../../config/default.yaml";
 
     //handle cmd line args:
-    if (argc >= 2) {
+    if (argc >= 2){
         config_file_path = std::string(argv[1]);
         std::cout << "Using Config / CLI Arguments! " << config_file_path << std::endl;
     } else {
@@ -108,73 +125,39 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string name = cfg.stream_name;  // Stream name
-    std::string type = "EEG";  // Stream type
     std::string path = cfg.sim_data_path;  // File path to sim data
-    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
     //path = "../../data/save_data/test.xdf";
 
     // Check if provided Data File is in .mat or .xdf format:
     bool isXdf = checkFileType(path);
-    std::cout << isXdf << std::endl;
+
+    // memory variables for mat/xdf files
     int16_t* data;
+    std::vector<std::vector<std::variant<int,float,double,long, std::__cxx11::basic_string<char>>>> samples;
     size_t numRows;
-
+    double sim_data_s_rate;
     if (!isXdf) {
-        // MATFILE ROUTINE
         mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
-        if (!matfp) {
-            std::cout << path.c_str() << std::endl;
-            std::cerr << "Error: Could not open .mat file." << std::endl;
-            return 1;
-        }
-
-        // Read the 'rawdata' structure from the .mat file
-        matvar_t *raw_data = Mat_VarRead(matfp, "rawdata");
-        if (!raw_data) {
-            std::cerr << "Error: Could not read 'rawdata' from .mat file." << std::endl;
-            Mat_Close(matfp);
-            return 1;
-        }
-
-        matvar_t* spikeVar = Mat_VarGetStructFieldByName(raw_data, "spike", 0);
-
-        if (!spikeVar) {
-            std::cerr << "Error: Could not find 'spike' matrix in the file." << std::endl;
-            return 1;
-        }
+        matvar_t* spikeVar = handle_mat_file(matfp);
 
         size_t* dims = spikeVar->dims;
+        sim_data_s_rate = 30000;  // currently only mat files are from Utah Array, 30khz
         numRows = dims[0];
-        size_t numCols = dims[1];
 
-        std::cout << "'spike' matrix dimensions: " << numRows << " x " << numCols << std::endl;
+        std::cout << "'spike' matrix dimensions: " << dims[0] << " x " << dims[1] << std::endl;
         data = static_cast<int16_t*>(spikeVar->data);
     }
 
-    std::vector<std::vector<std::variant<int,float,double,long, std::__cxx11::basic_string<char>>>> samples;
     if(isXdf) {
-        // XDFFILE routine
         try {
-            // Load the XDF file
             Xdf xdf;
             xdf.load_xdf(path);
 
             samples = xdf.streams[0].time_series;
-            //auto timestamp = xdf.streams[0].time_stamps;   // Timestamps for all Channels
 
-
-            /*for(int ts=0; ts < 10; ts++){
-                for (int channel=0; channel<96; channel++) {
-                    trouble[channel] = (std::get<double>(samples[channel][ts]));
-                }
-                std::cout << "ts: " << ts << std::endl;
-                std::cout << "values: ";
-                for(auto &value: trouble) std::cout << value << " ";
-                std::cout << std::endl;
-            }*/
+            sim_data_s_rate = xdf.sampleRateMap.begin().operator*();
             numRows = samples[0].size();
-
 
         } catch (const std::exception &ex) {
             std::cerr << "Error: " << ex.what() << "\n";
@@ -182,34 +165,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
-
-    // prints time step 2 of Electrode 11
-    //std::cout << data[2 + numRows * 11] << std::endl;
-
     // Create LSL stream info
-    lsl::stream_info info(cfg.stream_name, type, cfg.n_channel, cfg.sampling_rate, lsl::cf_double64, "myuid34234");
-
-    // Create a new outlet to send data
+    lsl::stream_info info(cfg.stream_name, "EEG", cfg.n_channel, cfg.sampling_rate, lsl::cf_double64, "myuid34234");
     lsl::stream_outlet outlet(info);
 
     std::cout << "Now sending data..." << std::endl;
 
     std::vector sample(cfg.n_channel,0);
+
     int ts = 0;
-    // calculate step size, original data is recorded at 30khz
-    int step_size = 30000/cfg.sampling_rate;
+    int step_size = sim_data_s_rate/cfg.sampling_rate;  // calculate step size, original data is recorded at 30khz
     double sleep_duration = 1.0/cfg.sampling_rate * 1000000.0 * 0.85;
 
     std::cout << "Step Size: " << step_size << "\nSleep Duration: " << sleep_duration << std::endl;
 
+    long global_duration = 1000000;  // how long the last dataset second (s_rate samples) as a metric of how close we are to real time
     auto start = std::chrono::high_resolution_clock::now();
-
-    long global_duration = 1000000;  // TRASH VARIABLE FOR PROOF OF CONCEPT
 
     while (true) {
 
         // Prepare sample (vector of ints)
-
         if(!isXdf){
             for(int j = 0; j < cfg.n_channel; j++) {
                 sample[j] = data[numRows*j + ts];
@@ -220,7 +195,6 @@ int main(int argc, char* argv[]) {
                 sample[j] = int(std::get<double>(samples[j][ts]));
             }
         }
-
 
         outlet.push_sample(sample);
 

@@ -17,4 +17,4 @@ recording:
   do_record: true
   duration: 20
   path: "data/save_data/"
-  filename: "test2.xdf"
+  filename: "test3.xdf"

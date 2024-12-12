@@ -18,8 +18,8 @@ public:
 private:
     std::vector<double> numerator;     // b coefficients
     std::vector<double> denominator;  // a coefficients
-    std::vector<double> taps;          // Past inputs/outputs for calculation
-
+    std::vector<double> taps;          // Past inputs
+    std::vector<double> out_taps;   // Past outputs
     void calculateCoefficients() override; // Calculate filter coefficients
 };
 

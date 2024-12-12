@@ -18,6 +18,8 @@ add_executable(processing main.cpp
         lib/IIR_Filter.h
         lib/xdfwriter.cpp
         lib/xdfwriter.h
-        lib/conversions.h)
+        lib/conversions.h
+        lib/Biquad.cpp
+        lib/Biquad.h)
 
 target_link_libraries(processing LSL::lsl pybind11::embed yaml-cpp iir::iir)

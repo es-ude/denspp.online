@@ -5,6 +5,7 @@
 #include "lib/Filter.h"
 #include "lib/FIR_Filter.h"
 #include "lib/IIR_Filter.h"
+#include "lib/Biquad.h"
 #include "lib/xdfwriter.h"
 #include "Iir.h"
 
@@ -64,11 +65,46 @@ Config readConfig(const std::string& filename) {
 
     return cfg;
 }
+void write_header(XDFWriter* writer, const Config& cfg ) {
+    std::ostringstream xml;
+    xml << "<?xml version=\"1.0\"?>"
+        << "<info>"
+        << "<name>SaveUtahData</name>"
+        << "<type>EEG</type>"
+        << "<channel_count>" << cfg.n_channel << "</channel_count>"
+        << "<nominal_srate>" << cfg.sampling_rate << "</nominal_srate>"
+        << "<channel_format>" << "double64" << "</channel_format>"
+        << "<created_at>50942.723319709003</created_at>"
+        << "</info>";
 
+    // Convert to string
+    std::string content = xml.str();
+    writer->write_stream_header(0,content);
+}
+void write_footer(XDFWriter* writer,const Config& cfg ,double exact_ts, double time_stamp) {
+    std::cout << "Finished Recording all Samples" << std::endl;
+    std::cout << "Final Timestamp: " << exact_ts << std::endl;
+    std::cout << "Final Sample Count: "<< time_stamp <<std::endl;
+
+    std::ostringstream xml;
+    xml << "<?xml version=\"1.0\"?>"
+        << "<info>"
+        << "<first_timestamp>0.0</first_timestamp>"
+        << "<last_timestamp>" << cfg.recording.duration << "</last_timestamp>"
+        << "<sample_count>" << cfg.recording.duration * cfg.sampling_rate << "</sample_count>"
+        << "<clock_offsets>"
+        << "<offset><time>0</time><value>0</value></offset>"
+        << "</clock_offsets>"
+        << "</info>";
+
+    std::string footer = xml.str();
+    writer->write_boundary_chunk();
+    writer->write_stream_footer(0, footer);
+}
 
 
 int main(int argc,char* argv[]) {
-    std::string config_file_path = "../../config/layout_test.yaml";
+    std::string config_file_path = "../../config/default.yaml";
     //handle cmd line args:
     if (argc >= 2) {
         config_file_path = std::string(argv[1]);
@@ -97,17 +133,13 @@ int main(int argc,char* argv[]) {
     lsl::stream_outlet outlet(info);
 
     // generate Filters:
-    std::vector<std::unique_ptr<Filter>> filters;
-    std::vector<Iir::Butterworth::BandPass<4>> iirfilters;
-
+    std::vector<std::unique_ptr<Filter>> filters;  // OWN FIR FILTERS
     filters.reserve(cfg.n_channel);
-    iirfilters.reserve(cfg.n_channel);
     for (int i=0;i<cfg.n_channel;i++) {
         if (cfg.filter.filter_class == "iir") {
-            Iir::Butterworth::BandPass<4> f;
-            f.setup(cfg.sampling_rate, cfg.filter.lowcut + (cfg.filter.highcut - cfg.filter.lowcut)/2, (cfg.filter.highcut - cfg.filter.lowcut));
-
-            iirfilters.emplace_back(f);
+            filters.emplace_back(std::make_unique<IIR_Filter>(cfg.filter.order, cfg.sampling_rate,
+                                                                "double", cfg.filter.type,
+                                                                cfg.filter.lowcut, cfg.filter.highcut));
         }else {
             filters.emplace_back(std::make_unique<FIR_Filter>(cfg.filter.order, cfg.sampling_rate,
                                                                 "double", cfg.filter.type,
@@ -115,20 +147,20 @@ int main(int argc,char* argv[]) {
         }
     }
 
+    // generate filters:
+    std::vector<std::unique_ptr<Biquad>> biQfilters;
+    biQfilters.reserve(cfg.n_channel);
+    for(int i = 0; i< cfg.n_channel; i++) {
+        biQfilters.emplace_back(new Biquad(2,((cfg.filter.highcut - cfg.filter.lowcut)/2)/cfg.sampling_rate, 0.707,0));
+    }
+
     // setup the xdf file writer:
     std::string filename = cfg.recording.path + "/" + cfg.recording.file_name;
     std::cout << filename << std::endl;
     XDFWriter w(filename);
+
     if(cfg.recording.do_record){
-        w.write_stream_header(0, "<?xml version=\"1.0\"?>"
-                                     "<info>"
-                                     "<name>SaveUtahData</name>"
-                                     "<type>EEG</type>"
-                                     "<channel_count>96</channel_count>"
-                                     "<nominal_srate>30000</nominal_srate>"
-                                     "<channel_format>double64</channel_format>"
-                                     "<created_at>50942.723319709003</created_at>"
-                                     "</info>");
+        write_header(&w, cfg);
     }
 
     try {
@@ -155,8 +187,8 @@ int main(int argc,char* argv[]) {
         while (true) {
             inlet.pull_sample(sample);
             for (int channel = 0; channel < cfg.n_channel; channel++) {
-                //filtered_values[channel] = filters[channel]->calculateOutput(sample[channel]);
-                filtered_values[channel] = iirfilters[channel].filter(sample[channel]);
+                filtered_values[channel] = filters[channel]->calculateOutput(sample[channel]);
+                //filtered_values[channel] = biQfilters[channel]->process(sample[channel]);
             }
 
             // write sample to save file if necessary // TODO: save samples in vector and save them in bundles
@@ -167,21 +199,8 @@ int main(int argc,char* argv[]) {
                     w.write_data_chunk(0, {exact_ts}, sample, 96);
                 }
                 if (time_stamp == cfg.recording.duration * cfg.sampling_rate) {
-                    std::cout << "Finished Recording all Samples" << std::endl;
-                    std::cout << "Final Timestamp: " << exact_ts << std::endl;
-                    std::cout << "Final Sample Count: "<< time_stamp <<std::endl;
-                    const std::string footer(
-                        "<?xml version=\"1.0\"?>"
-                        "<info>"
-                        "<first_timestamp>0.0</first_timestamp>"
-                        "<last_timestamp>20.000</last_timestamp>"
-                        "<sample_count>600000</sample_count>"
-                        "<clock_offsets>"
-                        "<offset><time>0</time><value>0</value></offset>"
-                        "</clock_offsets></info>");
-                    w.write_boundary_chunk();
-                    w.write_stream_footer(0, footer);
-                    }
+                    write_footer(&w, cfg,exact_ts, time_stamp);
+                }
             }
 
 

@@ -20,8 +20,9 @@ IIR_Filter::IIR_Filter(int order, double sampling_rate, std::string data_type, s
     : Filter(order, sampling_rate, std::move(data_type), std::move(filter_type), low_cut_off, high_cut_off) {
     numerator.resize(getOrder() + 1);
     denominator.resize(getOrder() + 1);
-    taps.resize(getOrder() + 1, 0.0);
     IIR_Filter::calculateCoefficients();
+    taps.resize(numerator.size(), 0.0);
+    out_taps.resize(denominator.size(), 0.0);
 }
 
 // Calculate IIR coefficients
@@ -29,7 +30,6 @@ void IIR_Filter::calculateCoefficients() {
     static PythonInterpreter interpreter;
 
     std::string filter_type = getFilterType();
-
 
     auto locals = py::dict(
         "order"_a = getOrder(),
@@ -59,42 +59,32 @@ void IIR_Filter::calculateCoefficients() {
 
     numerator = locals["b"].cast<std::vector<double>>();
     denominator = locals["a"].cast<std::vector<double>>();
-
-    /*std::cout << "IIR filter coefficients calculated." << std::endl;
-
-    std::cout << "numerator: " << std::endl;
-    for(auto num : numerator) {
-        std::cout << num << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "demoninator: " << std::endl;
-    for(auto den : denominator) {
-        std::cout << den << " ";
-    }
-    std::cout << std::endl; */
-
 }
 
 // Calculate output for the given input
 double IIR_Filter::calculateOutput(double data_in) {
     double output = 0.0;
+    static int in_tap_len = numerator.size();
+    static int out_tap_len = denominator.size();
 
-    // hier vielleicht lieber ein Ringbuffer ums schneller zu machen
-    for (int i = getOrder(); i > 0; --i) {
+    // previous inputs:
+    for (int i = in_tap_len-1; i > 0; --i) {
         taps[i] = taps[i - 1];
     }
     taps[0] = data_in;
+    for (int i = out_tap_len-1; i > 0; --i) {
+        out_taps[i] = out_taps[i - 1];
+    }
 
-    for (int i = 0; i <= getOrder(); ++i) {
+    for (int i = 0; i <= in_tap_len; ++i) {
         output += numerator[i] * taps[i];
     }
-    for (int i = 1; i <= getOrder(); ++i) {
-        output -= denominator[i] * taps[i];
+    for (int i = 1; i <= out_tap_len; ++i) {
+        output -= denominator[i] * out_taps[i];
     }
 
     output /= denominator[0];
-
+    out_taps[0] = output;
     return output;
 }
 
