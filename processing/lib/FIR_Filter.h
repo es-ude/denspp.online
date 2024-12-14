@@ -12,6 +12,7 @@ class FIR_Filter : public Filter {
 private:
     std::vector<double> coefficients;
     std::vector<double> taps;
+    int input_index;
     void calculateCoefficients() override;
 
 public:

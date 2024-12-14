@@ -18,6 +18,8 @@ public:
 // Constructor
 IIR_Filter::IIR_Filter(int order, double sampling_rate, std::string data_type, std::string filter_type, double low_cut_off, double high_cut_off)
     : Filter(order, sampling_rate, std::move(data_type), std::move(filter_type), low_cut_off, high_cut_off) {
+    input_index = 0;
+    output_index = 0;
     numerator.resize(getOrder() + 1);
     denominator.resize(getOrder() + 1);
     IIR_Filter::calculateCoefficients();
@@ -64,27 +66,35 @@ void IIR_Filter::calculateCoefficients() {
 // Calculate output for the given input
 double IIR_Filter::calculateOutput(double data_in) {
     double output = 0.0;
-    static int in_tap_len = numerator.size();
-    static int out_tap_len = denominator.size();
 
-    // previous inputs:
-    for (int i = in_tap_len-1; i > 0; --i) {
-        taps[i] = taps[i - 1];
-    }
-    taps[0] = data_in;
-    for (int i = out_tap_len-1; i > 0; --i) {
-        out_taps[i] = out_taps[i - 1];
+    // Write the current input to the ring buffer
+    taps[input_index] = data_in;
+
+    // Compute the feedforward part (numerator)
+    for (size_t i = 0; i < numerator.size(); ++i) {
+        int index = (input_index - i + taps.size()) % taps.size();
+        output += numerator[i] * taps[index];
     }
 
-    for (int i = 0; i <= in_tap_len; ++i) {
-        output += numerator[i] * taps[i];
-    }
-    for (int i = 1; i <= out_tap_len; ++i) {
-        output -= denominator[i] * out_taps[i];
+    // Compute the feedback part (denominator)
+    for (size_t i = 1; i < denominator.size(); ++i) {
+        int index = (output_index - i + out_taps.size()) % out_taps.size();
+        output -= denominator[i] * out_taps[index];
     }
 
+    // Normalize the output
+    if (denominator[0] == 0.0) {
+        throw std::runtime_error("Denominator coefficient a[0] cannot be zero.");
+    }
     output /= denominator[0];
-    out_taps[0] = output;
+
+    // Write the current output to the output ring buffer
+    out_taps[output_index] = output;
+
+    // Increment the ring buffer indices
+    input_index = (input_index + 1) % taps.size();
+    output_index = (output_index + 1) % out_taps.size();
+
     return output;
 }
 

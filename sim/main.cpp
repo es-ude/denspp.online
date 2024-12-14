@@ -7,103 +7,11 @@
 #include <xdf.h>
 
 #include <cstdint>
-#include <fstream>
-#include <queue>
+#include <unistd.h>
 #include <yaml-cpp/yaml.h>
+#include "../lib/config.h"
+#include "../lib/sim_file_io.h"
 
-struct FilterConfig {
-    std::string filter_class;
-    int order;
-    double lowcut;
-    double highcut;
-    std::string type;
-};
-
-struct RecordConfig {
-    bool do_record;
-    int duration;
-    std::string path;
-    std::string file_name;
-};
-
-struct Config {
-    int n_channel;
-    int sampling_rate;
-    bool do_plot;
-    bool use_hw;
-    bool use_lsl;
-    std::string stream_name;
-    std::string sim_data_path;
-    FilterConfig filter;
-    RecordConfig recording;
-};
-
-Config readConfig(const std::string& filename) {
-    YAML::Node config = YAML::LoadFile(filename);
-
-    Config cfg;
-    cfg.n_channel = config["n_channel"].as<int>();
-    cfg.sampling_rate = config["sampling_rate"].as<int>();
-    cfg.do_plot = config["do_plot"].as<bool>();
-    cfg.use_hw = config["use_hw"].as<bool>();
-    cfg.use_lsl = config["use_lsl"].as<bool>();
-    cfg.stream_name = config["stream_name"].as<std::string>();
-    cfg.sim_data_path = config["sim_data_path"].as<std::string>();
-
-    // Load filter settings
-    YAML::Node filter = config["filter"];
-    cfg.filter.filter_class = filter["class"].as<std::string>();
-    cfg.filter.order = filter["order"].as<int>();
-    cfg.filter.lowcut = filter["lowcut"].as<double>();
-    cfg.filter.highcut = filter["highcut"].as<double>();
-    cfg.filter.type = filter["type"].as<std::string>();
-
-    // Load recording settings;
-    YAML::Node recording = config["recording"];
-    cfg.recording.do_record = recording["do_record"].as<bool>();
-    cfg.recording.duration = recording["duration"].as<int>();
-    cfg.recording.path = recording["path"].as<std::string>();
-    cfg.recording.file_name = recording["filename"].as<std::string>();
-
-    return cfg;
-}
-
-bool checkFileType(const std::string& filepath) {
-    // true: file ends on .xdf, false: file ends on .mat
-
-    size_t dotPos = filepath.rfind('.');
-    if (dotPos == std::string::npos) {
-        throw std::runtime_error("No dot found :c"); //
-    }
-    std::string extension = filepath.substr(dotPos + 1);
-    // Convert to lowercase for case-insensitive comparison
-    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-    if (extension == "mat") {
-        return false;
-    } else if (extension == "xdf") {
-        return true;
-    } else {
-        throw std::runtime_error("Unsupported file extension");
-    }
-}
-
-matvar_t* handle_mat_file(mat_t* matfile) {
-    if (!matfile) {
-        throw std::runtime_error("Could not open .mat file");
-    }
-
-    matvar_t *raw_data = Mat_VarRead(matfile, "rawdata");
-    if (!raw_data) {
-        throw std::runtime_error("Could not open .mat file");
-    }
-
-    matvar_t *spikeVar = Mat_VarGetStructFieldByName(raw_data, "spike", 0);
-    if (!spikeVar) {
-        throw std::runtime_error("Could not open .mat file");
-    }
-    return spikeVar;
-}
 
 
 int main(int argc, char* argv[]) {
@@ -126,7 +34,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::string path = cfg.sim_data_path;  // File path to sim data
-    path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
     //path = "../../data/save_data/test.xdf";
 
     // Check if provided Data File is in .mat or .xdf format:
@@ -179,7 +87,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Step Size: " << step_size << "\nSleep Duration: " << sleep_duration << std::endl;
 
-    long global_duration = 1000000;  // how long the last dataset second (s_rate samples) as a metric of how close we are to real time
+    long global_duration = 1000000 ;  // how long the last dataset second (s_rate samples) as a metric of how close we are to real time
     auto start = std::chrono::high_resolution_clock::now();
 
     while (true) {

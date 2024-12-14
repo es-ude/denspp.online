@@ -26,6 +26,7 @@ FIR_Filter::FIR_Filter(int order, double sampling_rate, std::string data_type, s
     : Filter(order, sampling_rate, std::move(data_type), std::move(filter_type), low_cut_off, high_cut_off) {
 
     std::cout << "FIR_Filter created." << std::endl;
+    input_index = 0;
     coefficients.resize(getOrder());
     taps.resize(getOrder(), 0.0);
     FIR_Filter::calculateCoefficients();
@@ -76,16 +77,17 @@ void FIR_Filter::calculateCoefficients() {
 }
 
 double FIR_Filter::calculateOutput(double data_in) {
-
-    for (int i = getOrder() - 1; i > 0; --i) {
-        taps[i] = taps[i - 1];
-    }
-    taps[0] = data_in;
-
     double output = 0.0;
-    for (int i = 0; i < getOrder(); ++i) {
-        output += coefficients[i] * taps[i];
+
+    // newest element
+    taps[input_index] = data_in;
+
+    // feed forward term:
+    for (int i = 0; i < taps.size(); ++i) {
+        int index = (input_index - i + taps.size()) % taps.size();
+        output += coefficients[i] * taps[index];
     }
+    input_index = (input_index + 1) % taps.size();
     return output;
 }
 

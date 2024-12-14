@@ -20,6 +20,8 @@ private:
     std::vector<double> denominator;  // a coefficients
     std::vector<double> taps;          // Past inputs
     std::vector<double> out_taps;   // Past outputs
+    int input_index;                 // Index for input ring buffer
+    int output_index;
     void calculateCoefficients() override; // Calculate filter coefficients
 };
 
