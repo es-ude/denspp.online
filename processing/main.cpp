@@ -1,3 +1,5 @@
+#include <deque>
+
 #include "lsl_cpp.h"
 #include <iostream>
 #include <vector>
@@ -6,45 +8,9 @@
 #include "lib/FIR_Filter.h"
 #include "lib/IIR_Filter.h"
 #include "lib/Biquad.h"
-#include "lib/xdfwriter.h"
+#include "../lib/xdfwriter.h"
 #include "../lib/config.h"
-
-void write_header(XDFWriter* writer, const Config& cfg ) {
-    std::ostringstream xml;
-    xml << "<?xml version=\"1.0\"?>"
-        << "<info>"
-        << "<name>SaveUtahData</name>"
-        << "<type>EEG</type>"
-        << "<channel_count>" << cfg.n_channel << "</channel_count>"
-        << "<nominal_srate>" << cfg.sampling_rate << "</nominal_srate>"
-        << "<channel_format>" << "double64" << "</channel_format>"
-        << "<created_at>50942.723319709003</created_at>"
-        << "</info>";
-
-    // Convert to string
-    std::string content = xml.str();
-    writer->write_stream_header(0,content);
-}
-void write_footer(XDFWriter* writer,const Config& cfg ,double exact_ts, double time_stamp) {
-    std::cout << "Finished Recording all Samples" << std::endl;
-    std::cout << "Final Timestamp: " << exact_ts << std::endl;
-    std::cout << "Final Sample Count: "<< time_stamp <<std::endl;
-
-    std::ostringstream xml;
-    xml << "<?xml version=\"1.0\"?>"
-        << "<info>"
-        << "<first_timestamp>0.0</first_timestamp>"
-        << "<last_timestamp>" << cfg.recording.duration << "</last_timestamp>"
-        << "<sample_count>" << cfg.recording.duration * cfg.sampling_rate << "</sample_count>"
-        << "<clock_offsets>"
-        << "<offset><time>0</time><value>0</value></offset>"
-        << "</clock_offsets>"
-        << "</info>";
-
-    std::string footer = xml.str();
-    writer->write_boundary_chunk();
-    writer->write_stream_footer(0, footer);
-}
+#include "../lib/xdf_writer_template.h"
 
 
 int main(int argc,char* argv[]) {
@@ -100,6 +66,7 @@ int main(int argc,char* argv[]) {
 
     // setup the xdf file writer:
     std::string filename = cfg.recording.path + "/" + cfg.recording.file_name;
+    //filename = "../../data/save_data/test3.xdf";
     std::cout << filename << std::endl;
     XDFWriter w(filename);
 
@@ -128,6 +95,12 @@ int main(int argc,char* argv[]) {
 
         double exact_ts = 0;
 
+        // create buffer for previous seconds
+        const size_t window_size = 5; // keep 5 seconds stored
+        std::vector<std::pair<double,std::vector<double>>> samples;
+        std::deque<std::vector<std::pair<double, std::vector<double>>>> buffer;
+
+
         while (true) {
             inlet.pull_sample(sample);
             for (int channel = 0; channel < cfg.n_channel; channel++) {
@@ -137,6 +110,7 @@ int main(int argc,char* argv[]) {
 
             // write sample to save file if necessary // TODO: save samples in vector and save them in bundles
             exact_ts = (static_cast<double>(time_stamp)/cfg.sampling_rate);
+            samples.emplace_back(exact_ts, sample);
 
             if(cfg.recording.do_record){
                 if (time_stamp <= cfg.recording.duration * cfg.sampling_rate) {
@@ -159,6 +133,12 @@ int main(int argc,char* argv[]) {
             if (time_stamp % cfg.sampling_rate == 0) {
                 std::cout << "P: Time passed: " << ++sim_seconds << "s" << std::endl;
                 std::cout << std::endl;
+
+                buffer.emplace_back(samples);
+                samples.clear();
+
+                if(buffer.size() > window_size) buffer.pop_front();
+
             }
             ++time_stamp;
         }
