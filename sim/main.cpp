@@ -34,8 +34,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::string path = cfg.sim_data_path;  // File path to sim data
-    //path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
-    //path = "../../data/save_data/test.xdf";
+    // path = "../../data/sim_data/utah_dataset_snippet.mat";  // USE this path if simulation is launched from sim directory
+    // path = "../../data/save_data/test.xdf";
 
     // Check if provided Data File is in .mat or .xdf format:
     bool isXdf = checkFileType(path);

@@ -1,3 +1,4 @@
+// Code from Labrecorder https://github.com/labstreaminglayer/App-LabRecorder
 // Most target architectures are little-endian with IEC559/IEEE754 floats
 // This header provides conversion functions for all others and
 // functions to write binary data to streambufs
