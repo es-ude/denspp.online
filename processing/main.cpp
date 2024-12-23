@@ -1,6 +1,7 @@
 #include <deque>
 
 #include "lsl_cpp.h"
+#include <cmath>
 #include <iostream>
 #include <vector>
 #include <yaml-cpp/yaml.h>
@@ -31,12 +32,26 @@ public:
     }
 
     // Get the current standard deviation
-    double getStandardDeviation() const {
+    [[nodiscard]] double getStandardDeviation() const {
         if (count < 2) return 0.0; // Not enough samples
         return std::sqrt(m2 / count); // Population standard deviation
     }
 };
 
+struct SpikeEvent {
+    int channel;
+    long timestamp;
+};
+
+struct SampleData {
+    long timestamp;
+    std::vector<double> sample;
+};
+
+struct Window {
+    int idx;
+    std::vector<SampleData> data;
+};
 
 int main(int argc,char* argv[]) {
     std::string config_file_path = "../../config/default.yaml";
@@ -101,6 +116,7 @@ int main(int argc,char* argv[]) {
 
     // std dev calculator for each channel:
     std::vector<std::unique_ptr<OnlineStdDev>> stdCalcs;
+    stdCalcs.reserve(cfg.n_channel);
     for(int i = 0; i< cfg.n_channel; i++) {
         stdCalcs.emplace_back(new OnlineStdDev());
     }
@@ -121,23 +137,20 @@ int main(int argc,char* argv[]) {
 
 
         // initialise vector of filters (for each channel)
-        std::vector<int16_t> filtered_values(cfg.n_channel, 0);  // Store filtered output for each channel
-        std::vector<int16_t> outputSample(n_out_channel);
+        std::vector<double> filtered_values(cfg.n_channel, 0);  // Store filtered output for each channel
+        std::vector<double> outputSample(n_out_channel);
 
         double exact_ts = 0;
 
         // create buffer for previous seconds
         constexpr size_t max_buffer_size = 5; // how many windows to be stored
-        const size_t max_window_size = 1000; // how many samples in each window
-        const size_t spike_cut_out_len = 50;
-        std::vector<std::pair<int,std::vector<double>>> window;
-        std::vector<double> spike_cut_out;
-        std::deque<std::vector<std::pair<int , std::vector<double>>>> buffer;  // stores windows of data
+        constexpr size_t max_window_size = 1000; // how many samples in each window
+        constexpr size_t spike_cut_out_len = 50;
 
+        std::vector<SampleData> window;
+        std::deque<Window> window_buffer;
         // list of spike time stamps with channel
-        std::vector<std::pair<int, int>> spike_log;  // TODO: use a struct for a better overview of which field is which
-
-
+        std::deque<SpikeEvent> spike_events;
         // begin of processing loop
         while (true) {
             inlet.pull_sample(sample);
@@ -151,13 +164,26 @@ int main(int argc,char* argv[]) {
                 //filtered_values[channel] = filters[channel]->calculateOutput(sample[channel]);
                 filtered_values[channel] = biQfilters[channel]->process(sample[channel]);
 
-                // check for spikes: // only begin detection after 3 seconds to let the stdDev accumulate
-                if (abs(filtered_values[channel]) > 3 * stdCalcs[channel]->getStandardDeviation() and sampleIdx > cfg.sampling_rate*3) {
-                    std::cout << "SPIKE DETECTED" << std::endl;
-                    spike_log.emplace_back(channel,sampleIdx);
+                // check for spikes: // only begin detection after 5 seconds to let the stdDev accumulate
+                if (fabs(filtered_values[channel]) > 3 * stdCalcs[channel]->getStandardDeviation() and sampleIdx > cfg.sampling_rate*5) {
+
+                    // often the detection finds "several" spikes in the same channel close to each other
+                    // but the waveform are actually from the same spike
+                    // ignore the detected spike if the previous spike in the log are less than 10 indices away
+                    if(!spike_events.empty()) {
+                        // check if there's already an event
+                        auto prev_event = spike_events.back();
+                        if(sampleIdx > prev_event.timestamp+10 and channel == prev_event.channel) {
+                            std::cout << "Spike detected in channel: " << channel << std::endl;
+                            spike_events.push_back(SpikeEvent(channel,sampleIdx));
+                        }
+                    }else {
+                        // first event
+                        std::cout << "Spike detected in channel: " << channel << std::endl;
+                        spike_events.push_back(SpikeEvent(channel,sampleIdx));
+                    }
                 }
             }
-
             window.emplace_back(sampleIdx, sample);
 
 
@@ -165,30 +191,44 @@ int main(int argc,char* argv[]) {
             // +1 because if sampleIdx=0 the statement holds
             if ((sampleIdx+1) % max_window_size == 0){
 
-                // iterate over spike log:
-                for(auto& spike_event : spike_log) {
+                // iterate over all spike events
+                for(auto& spike_event : spike_events) {
+                    size_t pos_in_win = spike_event.timestamp % max_window_size;
 
-                    long pos_in_win = spike_event.second % max_window_size;
-                    // trivial case: the spike cutout is completely inside the current window
-                    if (spike_event.second >= window[0].first and spike_event.second < sampleIdx -
+                    // trivial case when the frame is completely within the window
+                    if (spike_event.timestamp >= window[0].timestamp and spike_event.timestamp < sampleIdx -
                         spike_cut_out_len / 2) {
                         if((int(pos_in_win) - int(spike_cut_out_len)/2) >= 0 and (pos_in_win + spike_cut_out_len/2) <= max_window_size) {
-                            std::cout << "Print Spike Waveform: " << std::endl;
+                            std::cout << "Spike Waveform in Python Array Structure: \ndata = [";
                             for (int i=0; i < spike_cut_out_len; i++) {
-                                std::cout << window[pos_in_win+i-spike_cut_out_len/2].second[spike_event.first] << " ";
+                                if (i != 0) std::cout << ", ";
+                                std::cout << window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel];
                             }
-                            std::cout << std::endl;
+                            std::cout << "] " << std::endl;
                         }
-                        spike_log.erase(spike_log.begin());
                     }
+
+                    // we would also have to look at spikes that happened at the start of the window and get the earlier
+                    // values from the waveform cutout
+                    // and what about spikes that happened at the end? They require future samples for their waveform
+
+                    // an easier implementation than the input windows would be keeping a queue of at least 2 times
+                    // the cutoff length. This way we could simply save part of the buffer cutoff_length/2-samples
+                    // after the detected spike index
+
+                    // remove the spike event from deque
+                    spike_events.pop_front();
                 }
+
+
                 // place full buffer at the end
-                buffer.emplace_back(window);
+                window_buffer.emplace_back(0,window);
                 window.clear();
 
                 // when buffer is full
-                if(buffer.size() > max_buffer_size) buffer.pop_front();  // TODO: write front to disc when removed from buffer
+                if(window_buffer.size() > max_buffer_size) window_buffer.pop_front();  // TODO: write front to disc when removed from buffer
             }
+
 
 
 
