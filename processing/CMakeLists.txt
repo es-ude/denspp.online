@@ -6,6 +6,8 @@ find_package(LSL REQUIRED)
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(yaml-cpp REQUIRED)
 
+set(Torch_DIR "/opt/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
 set(CMAKE_PREFIX_PATH "/home/k-dawg/.local/lib/python3.10/site-packages/pybind11/share/cmake/pybind11" ${CMAKE_PREFIX_PATH})
 find_package(pybind11 REQUIRED)
 
@@ -24,4 +26,4 @@ add_executable(processing main.cpp
         ../lib/xdf_writer_template.h
         ../lib/xdf_writer_template.cpp)
 
-target_link_libraries(processing LSL::lsl pybind11::embed yaml-cpp)
+target_link_libraries(processing LSL::lsl pybind11::embed yaml-cpp "${TORCH_LIBRARIES}")

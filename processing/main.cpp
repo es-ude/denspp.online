@@ -1,6 +1,8 @@
 #include <deque>
 
 #include "lsl_cpp.h"
+#include <torch/torch.h>
+#include <torch/script.h>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -145,12 +147,17 @@ int main(int argc,char* argv[]) {
         // create buffer for previous seconds
         constexpr size_t max_buffer_size = 5; // how many windows to be stored
         constexpr size_t max_window_size = 1000; // how many samples in each window
-        constexpr size_t spike_cut_out_len = 50;
+        constexpr size_t spike_cut_out_len = 32;  // input size of classifier model
 
         std::vector<SampleData> window;
         std::deque<Window> window_buffer;
         // list of spike time stamps with channel
         std::deque<SpikeEvent> spike_events;
+        std::vector<double> spike_waveform;
+        spike_waveform.reserve(spike_cut_out_len);
+
+        std::string modelpath = "../model.pt";
+        torch::jit::script::Module model = torch::jit::load(modelpath);
         // begin of processing loop
         while (true) {
             inlet.pull_sample(sample);
@@ -203,23 +210,21 @@ int main(int argc,char* argv[]) {
                             for (int i=0; i < spike_cut_out_len; i++) {
                                 if (i != 0) std::cout << ", ";
                                 std::cout << window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel];
+                                spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel]);
                             }
                             std::cout << "] " << std::endl;
                         }
+                        // Do model based inference:
+                        if(!spike_waveform.empty()) {
+                            torch::Tensor input = torch::tensor(spike_waveform);
+                            input = input.view({1,-1});
+                            auto output = model.forward({input});
+                            std::cout << "Model output: " << output << std::endl;
+                            spike_waveform.clear();
+                        }
                     }
-
-                    // we would also have to look at spikes that happened at the start of the window and get the earlier
-                    // values from the waveform cutout
-                    // and what about spikes that happened at the end? They require future samples for their waveform
-
-                    // an easier implementation than the input windows would be keeping a queue of at least 2 times
-                    // the cutoff length. This way we could simply save part of the buffer cutoff_length/2-samples
-                    // after the detected spike index
-
-                    // remove the spike event from deque
                     spike_events.pop_front();
                 }
-
 
                 // place full buffer at the end
                 window_buffer.emplace_back(0,window);
@@ -257,6 +262,7 @@ int main(int argc,char* argv[]) {
             // logging
             if (sampleIdx % cfg.sampling_rate == 0) {
                 std::cout << "P: Time passed: " << ++sim_seconds << "s" << std::endl;
+                std::cout << "Std Dev: " << stdCalcs[34]->getStandardDeviation();
                 std::cout << std::endl;
             }
             ++sampleIdx;
