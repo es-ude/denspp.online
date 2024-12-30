@@ -203,26 +203,45 @@ int main(int argc,char* argv[]) {
                     size_t pos_in_win = spike_event.timestamp % max_window_size;
 
                     // trivial case when the frame is completely within the window
-                    if (spike_event.timestamp >= window[0].timestamp and spike_event.timestamp < sampleIdx -
-                        spike_cut_out_len / 2) {
-                        if((int(pos_in_win) - int(spike_cut_out_len)/2) >= 0 and (pos_in_win + spike_cut_out_len/2) <= max_window_size) {
-                            std::cout << "Spike Waveform in Python Array Structure: \ndata = [";
-                            for (int i=0; i < spike_cut_out_len; i++) {
-                                if (i != 0) std::cout << ", ";
-                                std::cout << window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel];
-                                spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel]);
-                            }
-                            std::cout << "] " << std::endl;
+                    int frame_start = int(pos_in_win) - int(spike_cut_out_len)/2;
+                    int frame_end = int(pos_in_win) + int(spike_cut_out_len)/2;
+
+                    if(frame_start >= 0 and frame_end <= max_window_size) {
+                        std::cout << "Spike Waveform in Python Array Structure: \ndata = [";
+                        for (int i=0; i < spike_cut_out_len; i++) {
+                            if (i != 0) std::cout << ", ";
+                            std::cout << window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel];
+                            spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel]);
                         }
-                        // Do model based inference:
-                        if(!spike_waveform.empty()) {
-                            torch::Tensor input = torch::tensor(spike_waveform);
-                            input = input.view({1,-1});
-                            auto output = model.forward({input});
-                            std::cout << "Model output: " << output << std::endl;
-                            spike_waveform.clear();
-                        }
+                        std::cout << "] " << std::endl;
                     }
+                    // doesnt fit in the current frame
+                    if(frame_start < 0) {
+                        auto prev_window = window_buffer.back();
+                        std::cout << "Spike Waveform CORNER CASE  in Python Array Structure: \ndata = [";
+                        for (int i=abs(frame_start); i > 0; i--) {
+                            if (i != abs(frame_start)) std::cout << "; ";
+                            std::cout << prev_window.data[max_window_size-i].sample[spike_event.channel];
+                            spike_waveform.emplace_back(prev_window.data[max_window_size-i].sample[spike_event.channel]);
+                        }
+                        std::cout << ", ";
+                        for (int i=0; i < spike_cut_out_len+frame_start; i++) {
+                            if (i != 0) std::cout << ", ";
+                            std::cout << window[i].sample[spike_event.channel];
+                            spike_waveform.emplace_back(window[i].sample[spike_event.channel]);
+                        }
+                        std::cout << "] " << std::endl;
+                    }
+
+                    // Do model based inference:
+                    if(!spike_waveform.empty()) {
+                        torch::Tensor input = torch::tensor(spike_waveform);
+                        input = input.view({1,-1});
+                        auto output = model.forward({input});
+                        std::cout << "Model output: " << output << std::endl;
+                        spike_waveform.clear();
+                    }
+
                     spike_events.pop_front();
                 }
 

@@ -10,8 +10,10 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(MATIO REQUIRED matio)
 find_package(yaml-cpp REQUIRED)
 
-link_directories(/usr/lib/x86_64-linux-gnu/hdf5/openmpi)
-add_executable(sim main.cpp ../lib/config.cpp
+link_directories(/usr/lib/x86_64-linux-gnu/hdf5/serial)
+
+add_executable(sim main.cpp
+        ../lib/config.cpp
         ../lib/sim_file_io.h
         ../lib/sim_file_io.cpp)
 
