@@ -5,6 +5,7 @@
 #include <torch/script.h>
 #include <cmath>
 #include <iostream>
+#include <ranges>
 #include <vector>
 #include <yaml-cpp/yaml.h>
 #include "lib/Filter.h"
@@ -103,7 +104,7 @@ int main(int argc,char* argv[]) {
     std::vector<std::unique_ptr<Biquad>> biQfilters;
     biQfilters.reserve(cfg.n_channel);
     for(int i = 0; i< cfg.n_channel; i++) {
-        biQfilters.emplace_back(new Biquad(2,((cfg.filter.highcut - cfg.filter.lowcut)/2)/cfg.sampling_rate, 0.707,0));
+        biQfilters.emplace_back(new Biquad(2,((cfg.filter.highcut + cfg.filter.lowcut)/2)/cfg.sampling_rate, 0.707,0));
     }
 
     // setup the xdf file writer:
@@ -157,23 +158,26 @@ int main(int argc,char* argv[]) {
         spike_waveform.reserve(spike_cut_out_len);
 
         std::string modelpath = "../model.pt";
+        modelpath = "processing/model.pt";
         torch::jit::script::Module model = torch::jit::load(modelpath);
         // begin of processing loop
+        auto start = std::chrono::high_resolution_clock::now();
         while (true) {
             inlet.pull_sample(sample);
 
             // for every channel in the lsl stream
             for (int channel = 0; channel < cfg.n_channel; channel++) {
-                // update running stddev
-                stdCalcs[channel]->update(sample[channel]);
 
                 // calculate filter output
                 //filtered_values[channel] = filters[channel]->calculateOutput(sample[channel]);
                 filtered_values[channel] = biQfilters[channel]->process(sample[channel]);
 
-                // check for spikes: // only begin detection after 5 seconds to let the stdDev accumulate
-                if (fabs(filtered_values[channel]) > 3 * stdCalcs[channel]->getStandardDeviation() and sampleIdx > cfg.sampling_rate*5) {
+                // update running stddev on filtered data
+                stdCalcs[channel]->update(filtered_values[channel]);
 
+                // check for spikes: // only begin detection after 5 seconds to let the stdDev accumulate
+                if (filtered_values[channel] < -10 * stdCalcs[channel]->getStandardDeviation() and sampleIdx > cfg.sampling_rate*5) {
+ 
                     // often the detection finds "several" spikes in the same channel close to each other
                     // but the waveform are actually from the same spike
                     // ignore the detected spike if the previous spike in the log are less than 10 indices away
@@ -191,7 +195,7 @@ int main(int argc,char* argv[]) {
                     }
                 }
             }
-            window.emplace_back(sampleIdx, sample);
+            window.emplace_back(sampleIdx, filtered_values);
 
 
             // if max_window_size is reached:
@@ -202,36 +206,28 @@ int main(int argc,char* argv[]) {
                 for(auto& spike_event : spike_events) {
                     size_t pos_in_win = spike_event.timestamp % max_window_size;
 
-                    // trivial case when the frame is completely within the window
                     int frame_start = int(pos_in_win) - int(spike_cut_out_len)/2;
                     int frame_end = int(pos_in_win) + int(spike_cut_out_len)/2;
 
+                    // trivial case when the frame is completely within the window
                     if(frame_start >= 0 and frame_end <= max_window_size) {
-                        std::cout << "Spike Waveform in Python Array Structure: \ndata = [";
                         for (int i=0; i < spike_cut_out_len; i++) {
-                            if (i != 0) std::cout << ", ";
-                            std::cout << window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel];
                             spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event.channel]);
                         }
-                        std::cout << "] " << std::endl;
                     }
-                    // doesnt fit in the current frame
+
+                    // frame is at the start of the current frame
                     if(frame_start < 0) {
                         auto prev_window = window_buffer.back();
-                        std::cout << "Spike Waveform CORNER CASE  in Python Array Structure: \ndata = [";
                         for (int i=abs(frame_start); i > 0; i--) {
-                            if (i != abs(frame_start)) std::cout << "; ";
-                            std::cout << prev_window.data[max_window_size-i].sample[spike_event.channel];
                             spike_waveform.emplace_back(prev_window.data[max_window_size-i].sample[spike_event.channel]);
                         }
-                        std::cout << ", ";
                         for (int i=0; i < spike_cut_out_len+frame_start; i++) {
-                            if (i != 0) std::cout << ", ";
-                            std::cout << window[i].sample[spike_event.channel];
                             spike_waveform.emplace_back(window[i].sample[spike_event.channel]);
                         }
-                        std::cout << "] " << std::endl;
                     }
+
+                    // frame is at the end of the current frame
 
                     // Do model based inference:
                     if(!spike_waveform.empty()) {
@@ -239,6 +235,7 @@ int main(int argc,char* argv[]) {
                         input = input.view({1,-1});
                         auto output = model.forward({input});
                         std::cout << "Model output: " << output << std::endl;
+
                         spike_waveform.clear();
                     }
 
@@ -280,8 +277,12 @@ int main(int argc,char* argv[]) {
 
             // logging
             if (sampleIdx % cfg.sampling_rate == 0) {
-                std::cout << "P: Time passed: " << ++sim_seconds << "s" << std::endl;
-                std::cout << "Std Dev: " << stdCalcs[34]->getStandardDeviation();
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+                start = end;
+
+                std::cout << "P: Time passed: " << ++sim_seconds << "s (computed in: "<< duration.count() << "us)" <<std::endl;
+                std::cout << "Std Dev: " << stdCalcs[0]->getStandardDeviation();
                 std::cout << std::endl;
             }
             ++sampleIdx;

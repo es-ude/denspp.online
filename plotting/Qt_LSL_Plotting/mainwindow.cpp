@@ -102,6 +102,7 @@ void MainWindow::setupPlot()
 void MainWindow::realtimeDataSlot()
 {
     static int samples_received = 0;
+    int sample_counter = 0;
     std::vector<std::vector<int>> samples;
     std::vector<double> timestamps;
 
@@ -123,8 +124,8 @@ void MainWindow::realtimeDataSlot()
                 if (sampleValue < minVal) minVal = sampleValue;  // update plot limits
                 if (sampleValue > maxVal) maxVal = sampleValue;
 
-                plot->graph(0)->data()->removeBefore(timestamps[i] - 5);  // remove old datapoints
-                plot->graph(1)->data()->removeBefore(timestamps[i] - 5);
+                plot->graph(0)->data()->removeBefore(timestamps[i] - 3);  // remove old datapoints
+                plot->graph(1)->data()->removeBefore(timestamps[i] - 3);
 
             }
         }
@@ -143,6 +144,9 @@ void MainWindow::realtimeDataSlot()
             }
 
             plot->replot();
+        }
+        if(samples_received % s_rate == 0){
+            sample_counter = samples_received;
         }
         ui->statusbar->showMessage(
             QString("Total Data points: %1").arg(samples_received),

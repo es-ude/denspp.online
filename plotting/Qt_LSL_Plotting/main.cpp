@@ -36,7 +36,7 @@ std::vector<std::vector<int>> readCSV(const std::string& filePath) {
 
 int main(int argc, char *argv[])
 {
-    std::string layout_path = "../../config/layout_mea/Mapping_Utah.csv";
+    std::string layout_path = "../../config/layout_mea/Mapping_Test.csv";
     if (argc >= 2){
         layout_path = std::string(argv[1]);
     }

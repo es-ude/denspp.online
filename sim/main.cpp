@@ -13,7 +13,6 @@
 #include "../lib/sim_file_io.h"
 
 
-
 int main(int argc, char* argv[]) {
     std::string config_file_path = "../../config/default.yaml";
 
@@ -43,8 +42,9 @@ int main(int argc, char* argv[]) {
     // memory variables for mat/xdf files
     int16_t* data;
     std::vector<std::vector<std::variant<int,float,double,long, std::__cxx11::basic_string<char>>>> samples;
-    size_t numRows;
+    size_t numRows, numCols;
     double sim_data_s_rate;
+    int sim_channel_count;
     if (!isXdf) {
         mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
         matvar_t* spikeVar = handle_mat_file(matfp);
@@ -52,8 +52,9 @@ int main(int argc, char* argv[]) {
         size_t* dims = spikeVar->dims;
         sim_data_s_rate = 30000;  // currently only mat files are from Utah Array, 30khz
         numRows = dims[0];
-
-        std::cout << "'spike' matrix dimensions: " << dims[0] << " x " << dims[1] << std::endl;
+        numCols = dims[1];
+        sim_channel_count = numCols;
+        std::cout << "'spike' matrix dimensions: " << numRows << " x " << numCols << std::endl;
         data = static_cast<int16_t*>(spikeVar->data);
     }
 
@@ -66,7 +67,8 @@ int main(int argc, char* argv[]) {
 
             sim_data_s_rate = xdf.sampleRateMap.begin().operator*();
             numRows = samples[0].size();
-
+            numCols = samples[1].size();
+            sim_channel_count = numCols;
         } catch (const std::exception &ex) {
             std::cerr << "Error: " << ex.what() << "\n";
             return 1;
@@ -82,7 +84,10 @@ int main(int argc, char* argv[]) {
     std::vector sample(cfg.n_channel,0);
 
     int ts = 0;
-    int step_size = sim_data_s_rate/cfg.sampling_rate;  // calculate step size, original data is recorded at 30khz
+    int step_size = 1;
+    if (sim_data_s_rate>cfg.sampling_rate) {
+        step_size = sim_data_s_rate/cfg.sampling_rate;  // calculate step size, original data is recorded at 30khz
+    }
     double sleep_duration = 1.0/cfg.sampling_rate * 1000000.0 * 0.85;
 
     std::cout << "Step Size: " << step_size << "\nSleep Duration: " << sleep_duration << std::endl;
@@ -95,12 +100,14 @@ int main(int argc, char* argv[]) {
         // Prepare sample (vector of ints)
         if(!isXdf){
             for(int j = 0; j < cfg.n_channel; j++) {
-                sample[j] = data[numRows*j + ts];
+                int i = j % sim_channel_count;
+                sample[j] = data[numRows*i + ts];
             }
         }
         if(isXdf) {
             for(int j = 0; j < cfg.n_channel; j++) {
-                sample[j] = int(std::get<double>(samples[j][ts]));
+                int i = j % sim_channel_count;
+                sample[j] = int(std::get<double>(samples[i][ts]));
             }
         }
 
@@ -120,7 +127,7 @@ int main(int argc, char* argv[]) {
         if (cfg.sampling_rate <= 10000) {  // sleeps after every sample (only feasible for lower sampling rates
             // recalculate sleeping duration every second:
             if((ts/step_size) % cfg.sampling_rate == 0){
-                sleep_duration += 0.0005 * ((1000000 - global_duration));  // PID Controller without I and D :^)
+                sleep_duration += 0.0001 * ((1000000 - global_duration));  // PID Controller without I and D :^)
             }
             usleep(sleep_duration);
         }
