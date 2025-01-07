@@ -1,4 +1,4 @@
-n_channel: 36
+n_channel: 1
 sampling_rate: 1000
 do_plot: true
 use_hw: false

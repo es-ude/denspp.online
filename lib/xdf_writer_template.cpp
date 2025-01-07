@@ -18,7 +18,7 @@ void write_header(XDFWriter* writer, const Config& cfg ) {
     std::string content = xml.str();
     writer->write_stream_header(0,content);
 }
-void write_footer(XDFWriter* writer,const Config& cfg ,double exact_ts, double time_stamp) {
+void write_footer(XDFWriter* writer,const Config& cfg ,double exact_ts, long time_stamp) {
     std::cout << "Finished Recording all Samples" << std::endl;
     std::cout << "Final Timestamp: " << exact_ts << std::endl;
     std::cout << "Final Sample Count: "<< time_stamp <<std::endl;

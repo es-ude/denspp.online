@@ -21,12 +21,18 @@ Config readConfig(const std::string& filename) {
     cfg.filter.highcut = filter["highcut"].as<double>();
     cfg.filter.type = filter["type"].as<std::string>();
 
-    // Load recording settings;
+    // Load recording settings
     YAML::Node recording = config["recording"];
     cfg.recording.do_record = recording["do_record"].as<bool>();
     cfg.recording.duration = recording["duration"].as<int>();
     cfg.recording.path = recording["path"].as<std::string>();
     cfg.recording.file_name = recording["filename"].as<std::string>();
+
+    // Load buffer settings
+    YAML::Node buffer = config["buffer"];
+    cfg.buffer.size = buffer["size"].as<int>();
+    cfg.buffer.window_size = buffer["window_size"].as<int>();
+    cfg.buffer.waveform_size = buffer["waveform_size"].as<int>();
 
     return cfg;
 }

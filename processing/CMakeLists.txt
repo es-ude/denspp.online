@@ -12,18 +12,23 @@ set(CMAKE_PREFIX_PATH "/home/k-dawg/.local/lib/python3.10/site-packages/pybind11
 find_package(pybind11 REQUIRED)
 
 add_executable(processing main.cpp
-        lib/Filter.cpp
-        lib/FIR_Filter.cpp
-        lib/FIR_Filter.h
-        lib/IIR_Filter.cpp
-        lib/IIR_Filter.h
-        ../lib/xdfwriter.cpp
-        ../lib/xdfwriter.h
-        ../lib/conversions.h
-        lib/Biquad.cpp
-        lib/Biquad.h
-        ../lib/config.cpp
-        ../lib/xdf_writer_template.h
-        ../lib/xdf_writer_template.cpp)
+                filter/Filter.cpp
+                filter/FIR_Filter.cpp
+                filter/FIR_Filter.h
+                filter/IIR_Filter.cpp
+                filter/IIR_Filter.h
+                ../lib/xdfwriter.cpp
+                ../lib/xdfwriter.h
+                ../lib/conversions.h
+                filter/Biquad.cpp
+                filter/Biquad.h
+                ../lib/config.cpp
+                ../lib/xdf_writer_template.h
+                ../lib/xdf_writer_template.cpp
+                spikesorting/online_std_dev.cpp
+                spikesorting/online_std_dev.h
+                processing.cpp
+                processing.h
+)
 
 target_link_libraries(processing LSL::lsl pybind11::embed yaml-cpp "${TORCH_LIBRARIES}")

@@ -18,3 +18,7 @@ recording:
   duration: 20
   path: ""
   filename: ""
+buffer:
+  size: 5
+  window_size: 1000
+  waveform_size: 32

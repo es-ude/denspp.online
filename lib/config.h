@@ -18,6 +18,12 @@ struct RecordConfig {
     std::string file_name;
 };
 
+struct BufferConfig {
+    int size;
+    int window_size;
+    int waveform_size;
+};
+
 struct Config {
     int n_channel;
     int sampling_rate;
@@ -28,6 +34,7 @@ struct Config {
     std::string sim_data_path;
     FilterConfig filter;
     RecordConfig recording;
+    BufferConfig buffer;
 };
 
 Config readConfig(const std::string& filename);
