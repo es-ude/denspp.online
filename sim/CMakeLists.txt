@@ -15,7 +15,9 @@ link_directories(/usr/lib/x86_64-linux-gnu/hdf5/serial)
 add_executable(sim main.cpp
         ../lib/config.cpp
         ../lib/sim_file_io.h
-        ../lib/sim_file_io.cpp)
+        ../lib/sim_file_io.cpp
+        simulation.cpp
+        simulation.h)
 
 target_link_libraries(sim PRIVATE LSL::lsl ${MATIO_LIBRARIES} hdf5 z yaml-cpp curl xdf pugixml)
 target_include_directories(sim PRIVATE ${MATIO_INCLUDE_DIRS})

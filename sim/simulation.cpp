@@ -1,0 +1,138 @@
+#include "simulation.h"
+
+#include "../lib/sim_file_io.h"
+#include <yaml-cpp/yaml.h>
+#include <chrono>
+#include <iostream>
+
+Simulation::Simulation(const std::string &config_path) {
+    loadConfig(config_path);
+}
+
+void Simulation::run() {
+    setupDataSource();
+    sendData();
+}
+
+void Simulation::loadConfig(const std::string &config_path) {
+    try {
+        cfg = readConfig(config_path);
+        path = cfg.sim_data_path;
+    } catch (const YAML::Exception &e) {
+        throw std::runtime_error("Error parsing YAML file: " + std::string(e.what()));
+    }
+}
+
+void Simulation::setupDataSource() {
+    isXdf = checkFileType(path);
+
+    if (!isXdf) {
+        setupMatFile();
+    } else {
+        setupXdfFile();
+    }
+}
+
+void Simulation::setupMatFile() {
+    mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
+    if (!matfp) {
+        throw std::runtime_error("Failed to open .mat file: " + path);
+    }
+
+    matvar_t *spikeVar = handle_mat_file(matfp);
+    size_t *dims = spikeVar->dims;
+
+    sim_data_s_rate = 30000;  // Utah Array sampling rate
+    numRows = dims[0];
+    numCols = dims[1];
+    sim_channel_count = numCols;
+    data = static_cast<int16_t *>(spikeVar->data);
+
+    std::cout << "'spike' matrix dimensions: " << numRows << " x " << numCols << std::endl;
+}
+
+void Simulation::setupXdfFile() {
+    try {
+        Xdf xdf;
+        xdf.load_xdf(path);
+
+        samples = xdf.streams[0].time_series;
+        sim_data_s_rate = xdf.sampleRateMap.begin().operator*();
+        numRows = samples[0].size();
+        numCols = samples.size();
+        sim_channel_count = numCols;
+    } catch (const std::exception &ex) {
+        throw std::runtime_error("Error loading XDF file: " + std::string(ex.what()));
+    }
+}
+
+lsl::stream_outlet Simulation::createLSLStream() const {
+    lsl::stream_info info(cfg.stream_name, "EEG", cfg.n_channel, cfg.sampling_rate, lsl::cf_double64, "myuid34234");
+    lsl::stream_outlet outlet(info);
+    return outlet;
+}
+
+void Simulation::prepareSample(std::vector<int> &sample, const int ts) const {
+    if (!isXdf) {
+        for (int j = 0; j < cfg.n_channel; j++) {
+            const size_t i = j % sim_channel_count;
+            sample[j] = data[numRows * i + ts];
+        }
+    } else {
+        for (int j = 0; j < cfg.n_channel; j++) {
+            int i = j % sim_channel_count;
+            sample[j] = static_cast<int>(std::get<double>(samples[i][ts]));
+        }
+    }
+}
+
+void Simulation::sendData() const {
+    lsl::stream_outlet outlet = this->createLSLStream();
+
+    std::vector<int> sample(cfg.n_channel, 0);
+    int ts = 0;
+    const int step_size = (sim_data_s_rate > cfg.sampling_rate) ? sim_data_s_rate / cfg.sampling_rate : 1;
+    double sleep_duration = 1.0 / cfg.sampling_rate * 1000000.0 * 0.85;
+
+    u_int32_t global_duration = 1000000;  // metric for real-time pacing
+    auto start = std::chrono::high_resolution_clock::now();
+
+    while (true) {
+        prepareSample(sample, ts);
+        outlet.push_sample(sample);
+
+        ts += step_size;
+        if ((ts / step_size) % cfg.sampling_rate == 0) {
+            auto end = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+            start = end;
+
+            std::cout << "S: Time on dataset passed: " << (ts / step_size) / (cfg.sampling_rate)
+                      << "s (computed in: " << duration.count() << "us)" << std::endl;
+            global_duration = duration.count();
+        }
+
+        manageSleep(ts, step_size, sleep_duration, global_duration);
+
+        if (ts >= numRows) {
+            std::cout << ts << std::endl;
+            ts = 0;  // loop back
+        }
+    }
+}
+
+void Simulation::manageSleep(const int ts, const int step_size, double &sleep_duration, const int global_duration) const {
+    if (cfg.sampling_rate <= 10000) {  // idles for every sample
+        if ((ts / step_size) % cfg.sampling_rate == 0) {
+            sleep_duration += 0.0001 * (1000000 - global_duration);
+        }
+        usleep(sleep_duration);
+    } else {  // idles after multiple samples
+        if ((ts / step_size) % (cfg.sampling_rate / 1000) == 0) {
+            if ((ts / step_size) % cfg.sampling_rate == 0) {
+                sleep_duration += 0.0005 * (1000000 - global_duration);
+            }
+            usleep(sleep_duration);
+        }
+    }
+}
