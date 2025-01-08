@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>839</width>
+    <width>955</width>
     <height>600</height>
    </rect>
   </property>
@@ -20,18 +20,15 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QVBoxLayout" name="vertical">
-    <property name="topMargin">
-     <number>2</number>
-    </property>
-    <item>
-     <widget class="QFrame" name="customPlot">
-      <layout class="QGridLayout" name="gridLayout"/>
-     </widget>
-    </item>
-    <item>
+   <layout class="QGridLayout" name="gridLayout_3">
+    <item row="0" column="0">
      <widget class="QFrame" name="spike_waves">
       <layout class="QGridLayout" name="gridLayout_2"/>
+     </widget>
+    </item>
+    <item row="0" column="1">
+     <widget class="QFrame" name="customPlot">
+      <layout class="QGridLayout" name="gridLayout"/>
      </widget>
     </item>
    </layout>
@@ -41,7 +38,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>839</width>
+     <width>955</width>
      <height>22</height>
     </rect>
    </property>

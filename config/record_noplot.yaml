@@ -16,5 +16,9 @@ filter:
 recording:
   do_record: true
   duration: 20
-  path: "data/save_data"
-  filename: "test3.xdf"
+  path: "../../data/save_data"
+  filename: "test4.xdf"
+buffer:
+  size: 5
+  window_size: 1000
+  waveform_size: 32

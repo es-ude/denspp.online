@@ -27,9 +27,13 @@ private:
     Ui::MainWindow *ui;
     QTimer dataTimer;
     std::unique_ptr<lsl::stream_inlet> inlet; // Pointer for the LSL inlet
+    std::unique_ptr<lsl::stream_inlet> spike_inlet;
     int n_channel, s_rate;
     std::vector<QCustomPlot*> plots;
+    std::vector<QCustomPlot*> spike_plots;
     std::unordered_map<QCustomPlot*, int> plotChannelMap;
+    std::unordered_map<QCustomPlot*, int> spike_plotChannelMap;
+
     std::vector<std::vector<int>> layout;
 };
 #endif // MAINWINDOW_H

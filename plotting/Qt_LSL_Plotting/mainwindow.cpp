@@ -12,6 +12,8 @@ MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> la
 
 {
     ui->setupUi(this);
+
+    // resolve stream of filtered Data
     std::vector<lsl::stream_info> results = lsl::resolve_stream("name", "BioSemiFiltered");
     if (!results.empty()) {
         inlet = std::make_unique<lsl::stream_inlet>(results[0]);
@@ -20,6 +22,15 @@ MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> la
         std::cout << this->n_channel << " " << s_rate << std::endl;
     } else {
             qWarning("No LSL stream named 'BioSemiFiltered' found. Ensure stream is running.");
+    }
+
+    // resolve stream of spike values
+    std::vector<lsl::stream_info> spike_results = lsl::resolve_stream("name", "spikes");
+    if(!spike_results.empty()){
+        spike_inlet = std::make_unique<lsl::stream_inlet>(spike_results[0]);
+        std::cout << "connected to stream of spike waveforms!" << std::endl;
+    } else {
+        qWarning("No LSL stream named 'spikes' found. Ensure stream is running.");
     }
 
     MainWindow::setupPlot();
@@ -38,12 +49,20 @@ void MainWindow::setupPlot()
         ui->customPlot->setLayout(gridLayout);
     }
 
+    QGridLayout* spike_gridLayout = qobject_cast<QGridLayout*>(ui->spike_waves->layout());
+    if (!spike_gridLayout) {
+        spike_gridLayout = new QGridLayout(ui->spike_waves);
+        ui->spike_waves->setLayout(spike_gridLayout);
+    }
+
+
     gridLayout->setContentsMargins(0, 0, 0, 0);
-    gridLayout->setSpacing(0);
+    spike_gridLayout->setSpacing(0);
 
     int rows = layout.size();
     int cols = layout[0].size();
 
+    // setup raw and filtered data plots
     for (int row = 0; row < rows; ++row) {
         for (int col = 0; col < cols; ++col) {
             int channel = layout[row][col];
@@ -94,7 +113,54 @@ void MainWindow::setupPlot()
             plotChannelMap[plot] = channel - 1;
         }
     }
-    std::cout << "Plot layer is ready.." << std::endl;
+    std::cout << "Raw and Filter Data Plot layer is ready.." << std::endl;
+
+    // setup Waveform Data plots:
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; ++col) {
+            int channel = layout[row][col];
+            if (channel <= 0 || channel > n_channel/2) {
+
+                continue;
+            }
+
+            // Create the plot for this channel
+            QCustomPlot* plot = new QCustomPlot(ui->spike_waves);
+            plot->addGraph(); // Raw data
+
+            // Configure graph appearance
+            plot->graph(0)->setPen(QPen(QColor(255, 0, 255)));
+
+
+            plot->xAxis->setRange(0, 32);
+            //plot->axisRect()->setupFullAxesBox();
+            plot->yAxis->setRange(-500, 300);
+
+            plot->xAxis->setLabel("");
+            plot->yAxis->setLabel("");
+
+            plot->xAxis->setTickLabels(false);
+            plot->yAxis->setTickLabels(false);
+
+            QCPMarginGroup* marginGroup = new QCPMarginGroup(plot);
+            plot->axisRect()->setMargins(QMargins(0, 0, 0, 0));
+            plot->axisRect()->setMinimumMargins(QMargins(0, 0, 0, 0));
+            plot->axisRect()->setMarginGroup(QCP::msAll, marginGroup);
+
+            spike_gridLayout->addWidget(plot, row, col);
+
+            //QCPItemText* textLabel = new QCPItemText(plot);
+            //textLabel->setText(QString("%1").arg(channel));
+            //textLabel->setPositionAlignment(Qt::AlignTop | Qt::AlignLeft);
+            //textLabel->position->setType(QCPItemPosition::ptAxisRectRatio);
+            //textLabel->position->setCoords(0.08, 0.02); // Position in the top-left corner
+            //textLabel->setFont(QFont("Arial", 10, QFont::Bold));
+            //textLabel->setColor(QColor(50, 50, 50));
+
+            spike_plots.push_back(plot);
+            spike_plotChannelMap[plot] = channel - 1;
+        }
+    }
     connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeDataSlot);
     dataTimer.start(1); // Adjust interval as needed
 }
@@ -102,12 +168,25 @@ void MainWindow::setupPlot()
 void MainWindow::realtimeDataSlot()
 {
     static int samples_received = 0;
-    int sample_counter = 0;
     std::vector<std::vector<int>> samples;
+    std::vector<std::vector<double>> spike_samples;
     std::vector<double> timestamps;
+    std::vector<double> spike_timestamps;
+    bool spikes_available = false;
 
     inlet->pull_chunk(samples, timestamps);
+    spikes_available = spike_inlet->pull_chunk(spike_samples, spike_timestamps);
 
+    if(spikes_available){
+         for(auto& spike : spike_samples){
+            for(auto& [spike_plot, channel] : spike_plotChannelMap){
+                if(spike[0] == channel){
+                    for(int i=1; i< spike.size(); i++)
+                        spike_plot->graph(0)->addData(i,spike[i]);
+                }
+            }
+        }
+    }
     float minVal = std::numeric_limits<double>::max();
     float maxVal = std::numeric_limits<double>::lowest();
 
@@ -124,8 +203,8 @@ void MainWindow::realtimeDataSlot()
                 if (sampleValue < minVal) minVal = sampleValue;  // update plot limits
                 if (sampleValue > maxVal) maxVal = sampleValue;
 
-                plot->graph(0)->data()->removeBefore(timestamps[i] - 3);  // remove old datapoints
-                plot->graph(1)->data()->removeBefore(timestamps[i] - 3);
+                plot->graph(0)->data()->removeBefore(timestamps[i] - 1);  // remove old datapoints
+                plot->graph(1)->data()->removeBefore(timestamps[i] - 1);
 
             }
         }
@@ -145,9 +224,10 @@ void MainWindow::realtimeDataSlot()
 
             plot->replot();
         }
-        if(samples_received % s_rate == 0){
-            sample_counter = samples_received;
+        for(auto& spike_plot : spike_plots){
+            spike_plot->replot();
         }
+
         ui->statusbar->showMessage(
             QString("Total Data points: %1").arg(samples_received),
             0
