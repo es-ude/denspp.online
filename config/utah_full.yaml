@@ -2,7 +2,6 @@ n_channel: 96
 sampling_rate: 30000
 do_plot: true
 use_hw: false
-use_lsl: true
 stream_name: "BioSemi"
 sim_data_path: "/media/k-dawg/Volume/PraxisProjektRohdaten/rps_20131016-115158-NSP1-001_MERGED.mat"
 use_layout: true
@@ -21,4 +20,6 @@ recording:
 buffer:
   size: 5
   window_size: 1000
-  waveform_size: 32
+model:
+  path: "processing/model.pt"
+  input_size: 32

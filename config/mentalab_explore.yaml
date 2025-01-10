@@ -2,7 +2,6 @@ n_channel: 8
 sampling_rate: 1000
 do_plot: true
 use_hw: true
-use_lsl: true
 stream_name: "Explore_8573_ExG"
 sim_data_path: ""
 use_layout: true
@@ -17,4 +16,10 @@ recording:
   do_record: false
   duration: 10
   path: ""
-  filename: ""
+  filename: ""  
+buffer:
+  size: 5
+  window_size: 1000
+model:
+  path: "processing/model.pt"
+  input_size: 32

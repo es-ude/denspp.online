@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[]) {
     try {
-        std::string config_file_path = (argc >= 2) ? argv[1] : "../../config/default.yaml";
+        std::string config_file_path = (argc >= 2) ? argv[1] : "config/default.yaml";
         std::cout << "Using Config: " << config_file_path << std::endl;
 
         Simulation simulation(config_file_path);

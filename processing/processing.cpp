@@ -25,12 +25,12 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
     std::vector<double> sample(cfg.n_channel,0);
     std::vector<double> filtered_values(cfg.n_channel, 0);
     std::vector<double> outputSample(2 * cfg.n_channel, 0);
-    std::vector<double> spike_outputSample(cfg.buffer.waveform_size + 1, 0);
+    std::vector<double> spike_outputSample(cfg.model.input_size + 1, 0);
     long sampleIdx = 0;
     long sim_seconds = 0;
     double exact_ts = 0.0;
 
-    uint8_t spike_cut_out_len = cfg.buffer.waveform_size;  // input size of classifier model
+    uint8_t spike_cut_out_len = cfg.model.input_size;  // input size of classifier model
     window.reserve(cfg.buffer.window_size);
 
     // prepare recording of data
@@ -81,7 +81,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
 
                     // first lazy / slow implementation
                     spike_outputSample[0] = spike_event.channel;
-                    for(int i = 1; i <= cfg.buffer.waveform_size; i++) {
+                    for(int i = 1; i <= cfg.model.input_size; i++) {
                         spike_outputSample[i] = waveform[i-1];
                     }
                     spike_outlet->push_sample(spike_outputSample);
@@ -141,11 +141,13 @@ void Processing::loadConfig(const std::string &config_path) {
     } catch (const YAML::Exception &e) {
         throw std::runtime_error("Error parsing YAML file: " + std::string(e.what()));
     }
+    printConfig(cfg);
 }
 
 void Processing::loadModel() {
     // model path should be part of the config
     std::string modelpath = "../model.pt";
+    modelpath = cfg.model.path;
     model = torch::jit::load(modelpath);
     std::cout << "Loaded Torch Model successfully" << std::endl;
 
@@ -203,10 +205,10 @@ std::vector<double> Processing::extract_waveform(SpikeEvent *spike_event,int fra
     // trivial case when the frame is completely within the window
     std::vector<double> spike_waveform;
     static int window_size = cfg.buffer.window_size;
-    static int spike_cut_out_len = cfg.buffer.waveform_size;
+    static int spike_cut_out_len = cfg.model.input_size;
 
     if(frame_start >= 0 and frame_end <= window_size - spike_cut_out_len/2) {
-        for (int i=0; i < cfg.buffer.waveform_size; i++) {
+        for (int i=0; i < cfg.model.input_size; i++) {
             spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event->channel]);
         }
     }
@@ -239,14 +241,16 @@ lsl::stream_inlet Processing::setupLSLInlet() const {
 
 lsl::stream_outlet Processing::setupLSLOutlet() const{
     int n_out_channel = 2 * cfg.n_channel;
-    lsl::stream_info info("BioSemiFiltered", "EEG", n_out_channel, cfg.sampling_rate, lsl::cf_int16, "myuid34234filtered");
+    std::string name = cfg.stream_name + "_filtered";
+
+    lsl::stream_info info(name, "EEG", n_out_channel, cfg.sampling_rate, lsl::cf_int16, "3423421filtered");
     lsl::stream_outlet outlet(info);
     std::cout << "Created LSL Outlet for raw and filtered data!" << std::endl;
     return outlet;
 }
 
 lsl::stream_outlet Processing::setupLSLSpikeOutlet() const{
-    lsl::stream_info spike_info("spikes", "EEG", cfg.buffer.waveform_size + 1, lsl::IRREGULAR_RATE, lsl::cf_int16, "3113208");
+    lsl::stream_info spike_info("spikes", "EEG", cfg.model.input_size + 1, lsl::IRREGULAR_RATE, lsl::cf_int16, "3113208");
     lsl::stream_outlet spike_outlet(spike_info);
     std::cout << "Created LSL Outlet for detected spikes" << std::endl;
     return spike_outlet;

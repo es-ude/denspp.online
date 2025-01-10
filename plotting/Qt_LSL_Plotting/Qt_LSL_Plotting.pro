@@ -11,11 +11,13 @@ CONFIG += c++20
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    qcustomplot.cpp
+    qcustomplot.cpp \
+    ../../lib/config.cpp
 
 HEADERS += \
     mainwindow.h \
-    qcustomplot.h
+    qcustomplot.h \
+    ../../lib/config.h
 
 FORMS += \
     mainwindow.ui
@@ -26,3 +28,4 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
 LIBS += -L/usr/local/include -llsl
+LIBS += -L/usr/local/include -lyaml-cpp

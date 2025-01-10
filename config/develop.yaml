@@ -1,11 +1,11 @@
-n_channel: 10
+n_channel: 48
 sampling_rate: 10000
 do_plot: true
 use_hw: false
 stream_name: "BioSemi"
-sim_data_path: "data/sim_data/utah_dataset_snippet.mat"
-use_layout: false
-mapping_path: "config/layout_mea/Mapping_Utah.csv"
+sim_data_path: "/media/k-dawg/Volume/PraxisProjektRohdaten/rps_20131016-115158-NSP1-001_MERGED.mat"
+use_layout: true
+mapping_path: "../../config/layout_mea/Mapping_Utah.csv"
 filter:
   class: "iir"
   order: 4
@@ -21,5 +21,5 @@ buffer:
   size: 5
   window_size: 1000
 model:
-  path: "processing/model.pt"
+  path: "../model.pt"
   input_size: 32

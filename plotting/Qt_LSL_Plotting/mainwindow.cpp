@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include <lsl_cpp.h>
 #include <iostream>
+#include <QThread>
 
 MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> layout,QWidget *parent)
     : QMainWindow(parent)
@@ -14,7 +15,7 @@ MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> la
     ui->setupUi(this);
 
     // resolve stream of filtered Data
-    std::vector<lsl::stream_info> results = lsl::resolve_stream("name", "BioSemiFiltered");
+    std::vector<lsl::stream_info> results = lsl::resolve_stream("name", "BioSemi_filtered");
     if (!results.empty()) {
         inlet = std::make_unique<lsl::stream_inlet>(results[0]);
         this->n_channel =results[0].channel_count();
@@ -34,13 +35,15 @@ MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> la
     }
 
     MainWindow::setupPlot();
+
+    connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeSpikeDataSlot);
+    connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeDataSlot);
+    dataTimer.start(50);
 }
 
-MainWindow::~MainWindow()
-{
+MainWindow::~MainWindow() {
     delete ui;
 }
-
 void MainWindow::setupPlot()
 {
     QGridLayout* gridLayout = qobject_cast<QGridLayout*>(ui->customPlot->layout());
@@ -55,9 +58,10 @@ void MainWindow::setupPlot()
         ui->spike_waves->setLayout(spike_gridLayout);
     }
 
-
+    spike_gridLayout->setContentsMargins(0, 0, 0, 0);
     gridLayout->setContentsMargins(0, 0, 0, 0);
     spike_gridLayout->setSpacing(0);
+    gridLayout->setSpacing(0);
 
     int rows = layout.size();
     int cols = layout[0].size();
@@ -67,7 +71,6 @@ void MainWindow::setupPlot()
         for (int col = 0; col < cols; ++col) {
             int channel = layout[row][col];
             if (channel <= 0 || channel > n_channel/2) {
-
                 continue;
             }
 
@@ -120,19 +123,18 @@ void MainWindow::setupPlot()
         for (int col = 0; col < cols; ++col) {
             int channel = layout[row][col];
             if (channel <= 0 || channel > n_channel/2) {
-
                 continue;
             }
 
             // Create the plot for this channel
             QCustomPlot* plot = new QCustomPlot(ui->spike_waves);
-            plot->addGraph(); // Raw data
+            plot->addGraph();
 
             // Configure graph appearance
-            plot->graph(0)->setPen(QPen(QColor(255, 0, 255)));
+            plot->graph(0)->setPen(QPen(QColor(0, 0, 0)));
 
 
-            plot->xAxis->setRange(0, 32);
+            plot->xAxis->setRange(0, 32);  // MAGIC NUMBER!!
             //plot->axisRect()->setupFullAxesBox();
             plot->yAxis->setRange(-500, 300);
 
@@ -157,52 +159,73 @@ void MainWindow::setupPlot()
             //textLabel->setFont(QFont("Arial", 10, QFont::Bold));
             //textLabel->setColor(QColor(50, 50, 50));
 
+            // create color for this channel:
+            QColor* color = new QColor(0,0,0);
+            spike_colors.push_back(color);
+
             spike_plots.push_back(plot);
             spike_plotChannelMap[plot] = channel - 1;
         }
     }
-    connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeDataSlot);
-    dataTimer.start(1); // Adjust interval as needed
 }
-
-void MainWindow::realtimeDataSlot()
-{
-    static int samples_received = 0;
-    std::vector<std::vector<int>> samples;
-    std::vector<std::vector<double>> spike_samples;
+void MainWindow::realtimeSpikeDataSlot(){
     std::vector<double> timestamps;
-    std::vector<double> spike_timestamps;
+    std::vector<std::vector<double>> spike_samples;
     bool spikes_available = false;
 
-    inlet->pull_chunk(samples, timestamps);
-    spikes_available = spike_inlet->pull_chunk(spike_samples, spike_timestamps);
+    spikes_available = spike_inlet->pull_chunk(spike_samples, timestamps);
+
 
     if(spikes_available){
          for(auto& spike : spike_samples){
             for(auto& [spike_plot, channel] : spike_plotChannelMap){
                 if(spike[0] == channel){
-                    for(int i=1; i< spike.size(); i++)
+                    spike_plot->graph(0)->data()->clear();
+                    for(int i=1; i< spike.size(); i++){
                         spike_plot->graph(0)->addData(i,spike[i]);
+                    }
+                    spike_plot->replot();
+                }else{
+
                 }
             }
         }
     }
+
+}
+
+const std::unordered_map<QCustomPlot *, int> &MainWindow::getSpike_plotChannelMap() const
+{
+    return spike_plotChannelMap;
+}
+
+lsl::stream_inlet*MainWindow::getSpikeInlet() const
+{
+    return spike_inlet.get();
+}
+
+lsl::stream_inlet* MainWindow::getInlet() const
+{
+    return inlet.get();
+}
+void MainWindow::realtimeDataSlot()
+{
+    std::vector<std::vector<int>> samples;
+    std::vector<double> timestamps;
+    inlet->pull_chunk(samples, timestamps);
+
     float minVal = std::numeric_limits<double>::max();
     float maxVal = std::numeric_limits<double>::lowest();
 
     for (size_t i = 0; i < samples.size(); ++i) {
         samples_received++;
-
         for (auto& [plot, channel] : plotChannelMap) {
             plot->graph(0)->addData(timestamps[i], samples[i][2*channel]);
             plot->graph(1)->addData(timestamps[i],samples[i][2*channel+1]);
-
             if (samples_received % s_rate == 0) {  // every second
-
                 double sampleValue = samples[i][2*channel];
                 if (sampleValue < minVal) minVal = sampleValue;  // update plot limits
                 if (sampleValue > maxVal) maxVal = sampleValue;
-
                 plot->graph(0)->data()->removeBefore(timestamps[i] - 1);  // remove old datapoints
                 plot->graph(1)->data()->removeBefore(timestamps[i] - 1);
 
@@ -221,19 +244,8 @@ void MainWindow::realtimeDataSlot()
                     plot->yAxis->setRange(minVal - margin, maxVal + margin);
                 }
             }
-
             plot->replot();
         }
-        for(auto& spike_plot : spike_plots){
-            spike_plot->replot();
-        }
-
-        ui->statusbar->showMessage(
-            QString("Total Data points: %1").arg(samples_received),
-            0
-        );
+        ui->statusbar->showMessage(QString("Seconds passed: %1").arg(samples_received/s_rate), 0);
     }
 }
-
-
-

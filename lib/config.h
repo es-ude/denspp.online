@@ -21,7 +21,11 @@ struct RecordConfig {
 struct BufferConfig {
     int size;
     int window_size;
-    int waveform_size;
+};
+
+struct ModelConfig {
+    std::string path;
+    int input_size;
 };
 
 struct Config {
@@ -29,14 +33,18 @@ struct Config {
     int sampling_rate;
     bool do_plot;
     bool use_hw;
-    bool use_lsl;
     std::string stream_name;
     std::string sim_data_path;
+    bool use_layout;
+    std::string mapping_path;
     FilterConfig filter;
     RecordConfig recording;
     BufferConfig buffer;
+    ModelConfig model;
 };
 
 Config readConfig(const std::string& filename);
+
+void printConfig(const Config& cfg);
 
 #endif //CONFIG_H

@@ -21,6 +21,7 @@ void Simulation::loadConfig(const std::string &config_path) {
     } catch (const YAML::Exception &e) {
         throw std::runtime_error("Error parsing YAML file: " + std::string(e.what()));
     }
+    printConfig(cfg);
 }
 
 void Simulation::setupDataSource() {
@@ -126,13 +127,22 @@ void Simulation::manageSleep(const int ts, const int step_size, double &sleep_du
         if ((ts / step_size) % cfg.sampling_rate == 0) {
             sleep_duration += 0.0001 * (1000000 - global_duration);
         }
-        usleep(sleep_duration);
+        if(sleep_duration >=0) {
+            usleep(sleep_duration);
+        }else {
+            sleep_duration = 0;
+        }
+
     } else {  // idles after multiple samples
         if ((ts / step_size) % (cfg.sampling_rate / 1000) == 0) {
             if ((ts / step_size) % cfg.sampling_rate == 0) {
                 sleep_duration += 0.0005 * (1000000 - global_duration);
             }
-            usleep(sleep_duration);
+            if(sleep_duration >=0) {
+                usleep(sleep_duration);
+            }else {
+                sleep_duration = 0;
+            }
         }
     }
 }

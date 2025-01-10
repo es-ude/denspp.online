@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
 	# (3. Start the Plotting programm)
 	if do_plot:
-		plot_program = subprocess.Popen(['./plotting/build-Qt_LSL_Plotting-Desktop-Debug/Qt_LSL_Plotting'] + [mapping_path],
+		plot_program = subprocess.Popen(['./plotting/build-Qt_LSL_Plotting-Desktop-Debug/Qt_LSL_Plotting'] + args,
 									stdout=subprocess.PIPE, 
 									stderr=subprocess.PIPE)
 		print("Started Data visualizer...")
