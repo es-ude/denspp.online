@@ -38,7 +38,7 @@ MainWindow::MainWindow(int n_channel,int s_rate,std::vector<std::vector<int>> la
 
     connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeSpikeDataSlot);
     connect(&dataTimer, &QTimer::timeout, this, &MainWindow::realtimeDataSlot);
-    dataTimer.start(50);
+    dataTimer.start(0);
 }
 
 MainWindow::~MainWindow() {

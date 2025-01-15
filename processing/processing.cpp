@@ -42,14 +42,11 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
     // track the time for real time factor estimates
     auto start = std::chrono::high_resolution_clock::now();
 
-
-
     while(true) {
         inlet->pull_sample(sample);
 
         // filtering and spike detection
         for(int channel = 0; channel < sample.size(); channel++) {
-            //filtered_values[channel] = filters[channel]->calculateOutput(sample[channel]);
             filtered_values[channel] = biQfilters[channel]->process(sample[channel]);
             runningStdDev_calcs[channel]->update(filtered_values[channel]);
 
@@ -72,14 +69,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
                     torch::Tensor input = torch::tensor(waveform);
                     input = input.view({1,-1});
                     auto output = model.forward({input});
-                    //std::cout << "Model output: " << output << std::endl;
 
-                    /*for(int j = 0; j < cfg.buffer.waveform_size; j++) {
-                        std::cout << " " << waveform[j];
-                    }
-                    std::cout << std::endl;*/
-
-                    // first lazy / slow implementation
                     spike_outputSample[0] = spike_event.channel;
                     for(int i = 1; i <= cfg.model.input_size; i++) {
                         spike_outputSample[i] = waveform[i-1];
@@ -87,7 +77,6 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
                     spike_outlet->push_sample(spike_outputSample);
                     waveform.clear();
                 }
-
                 spike_events.pop_front();
             }
         }
@@ -113,8 +102,8 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
             start = end;
 
             std::cout << "P: Time passed: " << ++sim_seconds << "s (computed in: "<< duration.count() << "us)" <<std::endl;
-            std::cout << "Std Dev: " << runningStdDev_calcs[0]->getStandardDeviation();
-            std::cout << std::endl;
+            //std::cout << "Std Dev: " << runningStdDev_calcs[0]->getStandardDeviation();
+            //std::cout << std::endl;
         }
 
         // handle recording of neural device
@@ -182,19 +171,17 @@ void Processing::generateRunningStdDev() {
 }
 
 void Processing::detect_spikes(double filtered_value, uint32_t sampleIdx, int channel) {
+
     if(filtered_value < -5 * runningStdDev_calcs[channel]->getStandardDeviation() and sampleIdx > 5*cfg.sampling_rate) {
         if(!spike_events.empty()) {
             auto prev_event = spike_events.back();
             if(sampleIdx > prev_event.timestamp+10 and channel == prev_event.channel) {
-                //std::cout << "Spike detected in channel: " << channel << std::endl;
                 spike_events.push_back(SpikeEvent(channel,sampleIdx));
             }if(channel != prev_event.channel) {
-                //std::cout << "Spike detected in channel: " << channel << std::endl;
                 spike_events.push_back(SpikeEvent(channel,sampleIdx));
             }
         }else {
             // first event
-            //std::cout << "Spike detected in channel: " << channel << std::endl;
             spike_events.push_back(SpikeEvent(channel,sampleIdx));
 
         }
@@ -202,15 +189,17 @@ void Processing::detect_spikes(double filtered_value, uint32_t sampleIdx, int ch
 }
 
 std::vector<double> Processing::extract_waveform(SpikeEvent *spike_event,int frame_start, int frame_end, int pos_in_win) {
-    // trivial case when the frame is completely within the window
+
     std::vector<double> spike_waveform;
     static int window_size = cfg.buffer.window_size;
     static int spike_cut_out_len = cfg.model.input_size;
 
+    // trivial case when the frame is completely within the window
     if(frame_start >= 0 and frame_end <= window_size - spike_cut_out_len/2) {
         for (int i=0; i < cfg.model.input_size; i++) {
             spike_waveform.emplace_back(window[pos_in_win+i-spike_cut_out_len/2].sample[spike_event->channel]);
         }
+        return spike_waveform;
     }
 
     // frame is at the start of the current frame
@@ -222,10 +211,28 @@ std::vector<double> Processing::extract_waveform(SpikeEvent *spike_event,int fra
         for (int i=0; i < spike_cut_out_len+frame_start; i++) {
             spike_waveform.emplace_back(window[i].sample[spike_event->channel]);
         }
+        return spike_waveform;
     }
 
-    // frame is at the end of the current and start of the following frame:
-    // TODO
+    // if the spikeEvent is from the end previous window
+    if(spike_event->isOld == true) {
+        auto prev_window = window_buffer.back();
+        // frame start is in the old window
+        for (int i=frame_start; i < window_size; i++) {
+            spike_waveform.emplace_back(prev_window.data[i].sample[spike_event->channel]);
+        }
+        // frame end is in the current window
+        for(int i=0; i <abs(window_size-frame_end); i++) {
+            spike_waveform.emplace_back(window[i].sample[spike_event->channel]);
+        }
+        return spike_waveform;
+    }
+
+    // if the spike event is at the end of the current window + not from the previous window
+    if(frame_end>=window_size and spike_event->isOld == false) {
+        spike_event->isOld = true,
+        spike_events.push_back(*spike_event);
+    }
 
     return spike_waveform;
 }

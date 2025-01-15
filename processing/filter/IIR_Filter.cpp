@@ -41,11 +41,6 @@ void IIR_Filter::calculateCoefficients() {
         "filter_type"_a = filter_type
     );
 
-    std::cout << "order: " << getOrder() << ", "
-              << "low_cut_off: " << getLowCutOff() << ", "
-              << "high_cut_off: " << getHighCutOff() << ", "
-              << "sampling_rate: " << getSamplingRate() << std::endl;
-
     // Use Python to design the IIR filter
     if (filter_type == "bandpass") {
         py::exec(R"(

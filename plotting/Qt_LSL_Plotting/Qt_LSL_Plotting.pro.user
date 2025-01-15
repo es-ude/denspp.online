@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 6.0.2, 2025-01-10T11:23:41. -->
+<!-- Written by QtCreator 6.0.2, 2025-01-13T11:07:03. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -244,6 +244,7 @@
     <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">Qt4ProjectManager.Qt4RunConfiguration:/home/k-dawg/BA/denspp.online/plotting/Qt_LSL_Plotting/Qt_LSL_Plotting.pro</value>
     <value type="QString" key="ProjectExplorer.RunConfiguration.BuildKey">/home/k-dawg/BA/denspp.online/plotting/Qt_LSL_Plotting/Qt_LSL_Plotting.pro</value>
+    <value type="QString" key="RunConfiguration.Arguments">../../config/benchmark.yaml</value>
     <value type="bool" key="RunConfiguration.UseCppDebugger">false</value>
     <value type="bool" key="RunConfiguration.UseCppDebuggerAuto">true</value>
     <value type="bool" key="RunConfiguration.UseLibrarySearchPath">true</value>

@@ -1,5 +1,5 @@
 n_channel: 48
-sampling_rate: 10000
+sampling_rate: 30000
 do_plot: true
 use_hw: false
 stream_name: "BioSemi"
@@ -9,7 +9,7 @@ mapping_path: "../../config/layout_mea/Mapping_Utah.csv"
 filter:
   class: "iir"
   order: 4
-  lowcut: 1000.0
+  lowcut: 1500.0
   highcut: 3000.0
   type: "bandpass"
 recording:

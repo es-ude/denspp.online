@@ -14,6 +14,7 @@
 struct SpikeEvent {
     int channel;
     long timestamp;
+    bool isOld = false;
 };
 
 struct SampleData {
