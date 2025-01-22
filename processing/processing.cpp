@@ -41,7 +41,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
 
     // track the time for real time factor estimates
     auto start = std::chrono::high_resolution_clock::now();
-
+    int spikes_processed = 0;
     while(true) {
         inlet->pull_sample(sample);
 
@@ -75,6 +75,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
                         spike_outputSample[i] = waveform[i-1];
                     }
                     spike_outlet->push_sample(spike_outputSample);
+                    spikes_processed++;
                     waveform.clear();
                 }
                 spike_events.pop_front();
@@ -101,7 +102,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
             start = end;
 
-            std::cout << "P: Time passed: " << ++sim_seconds << "s (computed in: "<< duration.count() << "us)" <<std::endl;
+            std::cout << "P: Time passed: " << ++sim_seconds << "s (computed in: "<< duration.count() << "us), Spikes Processed: " << spikes_processed <<std::endl;
             //std::cout << "Std Dev: " << runningStdDev_calcs[0]->getStandardDeviation();
             //std::cout << std::endl;
         }

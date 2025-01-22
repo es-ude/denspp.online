@@ -1,6 +1,8 @@
 **/cmake-build-debug/
 **/build-Qt_LSL_Plotting-Desktop-Debug/
+**.pro.user
 **/.idea/
 **/.vscode/
 **.goutputstream-L1OPX2
+**.xdf
 

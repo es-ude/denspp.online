@@ -29,9 +29,27 @@ void Simulation::setupDataSource() {
 
     if (!isXdf) {
         setupMatFile();
+        //setupQuiroga();
+
     } else {
         setupXdfFile();
     }
+}
+
+void Simulation::setupQuiroga() {
+    mat_t *matfp = Mat_Open(path.c_str(), MAT_ACC_RDONLY);
+    matvar_t *spikeVar = Mat_VarRead(matfp, "data");
+    quirogaData = static_cast<double *>(spikeVar->data);
+
+    numRows = spikeVar->dims[1];
+    numCols = spikeVar->dims[0];
+    sim_data_s_rate = 24000;
+    sim_channel_count = numCols;
+    std::cout << "Scaling the Quiroga Datasets... " << numRows << " x " << numCols << std::endl;
+    for (int i = 0; i < numRows; i++) {
+        quirogaData[i] *= 300;
+    }
+
 }
 
 void Simulation::setupMatFile() {
@@ -73,11 +91,17 @@ lsl::stream_outlet Simulation::createLSLStream() const {
     return outlet;
 }
 
-void Simulation::prepareSample(std::vector<int> &sample, const int ts) const {
-    if (!isXdf) {
+void Simulation::prepareSample(std::vector<double> &sample, const int ts) const {
+    if (!isXdf) {  // == is Matfile
         for (int j = 0; j < cfg.n_channel; j++) {
-            const size_t i = j % sim_channel_count;
-            sample[j] = data[numRows * i + ts];
+            if(data!= nullptr) {
+                const size_t i = j % sim_channel_count;
+                sample[j] = data[numRows * i + ts];
+            }
+            if(quirogaData != nullptr) {
+                const size_t offset = j * 800; // two seconds offset
+                sample[j] = quirogaData[(ts + offset)%numRows];
+            }
         }
     } else {
         for (int j = 0; j < cfg.n_channel; j++) {
@@ -90,7 +114,7 @@ void Simulation::prepareSample(std::vector<int> &sample, const int ts) const {
 void Simulation::sendData() const {
     lsl::stream_outlet outlet = this->createLSLStream();
 
-    std::vector<int> sample(cfg.n_channel, 0);
+    std::vector<double> sample(cfg.n_channel, 0);
     int ts = 0;
     const int step_size = (sim_data_s_rate > cfg.sampling_rate) ? sim_data_s_rate / cfg.sampling_rate : 1;
     double sleep_duration = 1.0 / cfg.sampling_rate * 1000000.0 * 0.85;

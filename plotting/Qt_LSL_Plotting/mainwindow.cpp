@@ -216,9 +216,12 @@ void MainWindow::realtimeDataSlot()
 
     float minVal = std::numeric_limits<double>::max();
     float maxVal = std::numeric_limits<double>::lowest();
-
-    for (size_t i = 0; i < samples.size(); ++i) {
-        samples_received++;
+    int step_size = 1;
+    if(s_rate > 10000){
+        step_size = 3;
+    }
+    for (size_t i = 0; i < samples.size(); i+=step_size) {
+        samples_received+=step_size;
         for (auto& [plot, channel] : plotChannelMap) {
             plot->graph(0)->addData(timestamps[i], samples[i][2*channel]);
             plot->graph(1)->addData(timestamps[i],samples[i][2*channel+1]);
@@ -236,7 +239,7 @@ void MainWindow::realtimeDataSlot()
     if (!timestamps.empty()) {
         // Update the range of all plots
         for (auto& plot : plots) {
-            plot->xAxis->setRange(timestamps.back(), .5, Qt::AlignRight);
+            plot->xAxis->setRange(timestamps.back(), 1, Qt::AlignRight);
 
             if (samples_received % s_rate == 0) {
                 double margin = (maxVal - minVal) * 0.1; // 10% margin
