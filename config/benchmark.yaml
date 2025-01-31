@@ -1,0 +1,25 @@
+buffer:
+  size: 5
+  window_size: 1000
+do_plot: false
+filter:
+  class: iir
+  highcut: 3000.0
+  lowcut: 1000.0
+  order: 4
+  type: bandpass
+mapping_path: config/layout_mea/Mapping_Utah.csv
+model:
+  input_size: 32
+  path: processing/model.pt
+n_channel: 632
+recording:
+  do_record: false
+  duration: 20
+  filename: ''
+  path: ''
+sampling_rate: 20000
+sim_data_path: /media/k-dawg/Volume/PraxisProjektRohdaten/rps_20131016-115158-NSP1-001_MERGED.mat
+stream_name: BioSemi
+use_hw: false
+use_layout: false

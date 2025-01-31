@@ -104,7 +104,7 @@ if __name__ == "__main__":
     print("Start of Benchmark")
     results = []
     
-    prev_high = 1000 
+    prev_high = 1500 
     # iterate over the frequency range from 10,000 Hz to 100,000 Hz
     for sampling_rate in range(10000, 100001, 10000):
         print(f"Testing Frequency: {sampling_rate} Hz")

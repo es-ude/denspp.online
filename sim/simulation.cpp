@@ -111,33 +111,48 @@ void Simulation::prepareSample(std::vector<double> &sample, const int ts) const 
     }
 }
 
-void Simulation::sendData() const {
+[[noreturn]] void Simulation::sendData() const {
     lsl::stream_outlet outlet = this->createLSLStream();
 
     std::vector<double> sample(cfg.n_channel, 0);
     int ts = 0;
     const int step_size = (sim_data_s_rate > cfg.sampling_rate) ? sim_data_s_rate / cfg.sampling_rate : 1;
-    double sleep_duration = 1.0 / cfg.sampling_rate * 1000000.0 * 0.85;
+    double sleep_duration = 1.0 / cfg.sampling_rate * 1000000.0 * 0.85;  // initial sleeping interval, does not matter too much
 
-    u_int32_t global_duration = 1000000;  // metric for real-time pacing
-    auto start = std::chrono::high_resolution_clock::now();
+    constexpr int sleep_update_rate = 200; // PD controller update rate
+
+    auto start_seconds = std::chrono::high_resolution_clock::now();  // measure for seconds
+    auto start_PD_update = std::chrono::high_resolution_clock::now();  // measure for update intervals of PD controller
 
     while (true) {
         prepareSample(sample, ts);
         outlet.push_sample(sample);
 
         ts += step_size;
+
         if ((ts / step_size) % cfg.sampling_rate == 0) {
+            // every second, print time and dataset + real time taken
+
             auto end = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-            start = end;
+            auto real_time = std::chrono::duration_cast<std::chrono::microseconds>(end - start_seconds);
+            start_seconds = end;
 
             std::cout << "S: Time on dataset passed: " << (ts / step_size) / (cfg.sampling_rate)
-                      << "s (computed in: " << duration.count() << "us)" << std::endl;
-            global_duration = duration.count();
+                      << "s (computed in: " << real_time.count() << "us)" << std::endl;
         }
 
-        manageSleep(ts, step_size, sleep_duration, global_duration);
+
+        if ((ts / step_size) % (cfg.sampling_rate/sleep_update_rate) == 0) {
+            // every 1/sleep_update_rate update the PD parameters
+
+            auto end_PD_update = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_PD_update - start_PD_update);
+            start_PD_update = end_PD_update;
+
+            calculate_sleep_pd(sleep_update_rate, sleep_duration, duration.count());
+        }
+
+        manageSleep(ts, step_size, sleep_duration);  // idle for the given amount of time
 
         if (ts >= numRows) {
             std::cout << ts << std::endl;
@@ -146,27 +161,37 @@ void Simulation::sendData() const {
     }
 }
 
-void Simulation::manageSleep(const int ts, const int step_size, double &sleep_duration, const int global_duration) const {
-    if (cfg.sampling_rate <= 10000) {  // idles for every sample
-        if ((ts / step_size) % cfg.sampling_rate == 0) {
-            sleep_duration += 0.0001 * (1000000 - global_duration);
-        }
-        if(sleep_duration >=0) {
-            usleep(sleep_duration);
-        }else {
-            sleep_duration = 0;
-        }
-
-    } else {  // idles after multiple samples
-        if ((ts / step_size) % (cfg.sampling_rate / 1000) == 0) {
-            if ((ts / step_size) % cfg.sampling_rate == 0) {
-                sleep_duration += 0.0005 * (1000000 - global_duration);
-            }
-            if(sleep_duration >=0) {
-                usleep(sleep_duration);
-            }else {
-                sleep_duration = 0;
-            }
-        }
+void Simulation::manageSleep(const int ts, const int step_size, const double &sleep_duration) const{
+    if (cfg.sampling_rate <= 10000) {
+        // idles for every sample
+        usleep(sleep_duration);
     }
+    else{
+        // idles after multiple samples
+        if ((ts / step_size) % (cfg.sampling_rate / 1000) == 0)  usleep(sleep_duration);
+    }
+}
+
+
+void Simulation::calculate_sleep_pd(const int sleep_update_rate, double &sleep_duration, const long global_duration) {
+    static double prev_error = 0.0;
+
+    // Expected duration per update call (1 / sleep_update_rate in microseconds)
+    double expected_duration = 1000000.0 / sleep_update_rate;
+    double error = expected_duration - global_duration;
+
+    // PD Controller Gains
+    const double Kp = 0.02;  // Proportional Gain
+    const double Kd = 0.005; // Derivative Gain
+
+    // Compute PD control term
+    double dt = 1000000.0 / sleep_update_rate;  // Time step in microseconds
+    double derivative = (error - prev_error) / dt;
+    double adjustment = Kp * error + Kd * derivative;
+
+    // Update sleep duration
+    sleep_duration += adjustment;
+    if (sleep_duration < 0) sleep_duration = 0;
+
+    prev_error = error;
 }

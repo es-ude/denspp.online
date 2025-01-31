@@ -34,8 +34,10 @@ private:
     void setupQuiroga();
     [[nodiscard]] lsl::stream_outlet createLSLStream() const;
     void prepareSample(std::vector<double> &sample, int ts) const;
-    void sendData() const;
-    void manageSleep(int ts, int step_size, double &sleep_duration, int global_duration) const;
+    [[noreturn]] void sendData() const;
+    void manageSleep(int ts, int step_size, const double &sleep_duration) const;
+    static void calculate_sleep_pd(int sleep_update_rate, double &sleep_duration, long global_duration) ;
+
 };
 
 #endif // SIMULATION_H

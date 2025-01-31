@@ -69,7 +69,7 @@ void Processing::processData(lsl::stream_inlet *inlet, lsl::stream_outlet *outle
                     torch::Tensor input = torch::tensor(waveform);
                     input = input.view({1,-1});
                     auto output = model.forward({input});
-
+                    // std::cout <<"Spike in Channel: " <<spike_event.channel << ", Model output: "<< output << std::endl;
                     spike_outputSample[0] = spike_event.channel;
                     for(int i = 1; i <= cfg.model.input_size; i++) {
                         spike_outputSample[i] = waveform[i-1];
