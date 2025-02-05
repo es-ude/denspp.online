@@ -172,21 +172,19 @@ void Processing::generateRunningStdDev() {
 }
 
 void Processing::detect_spikes(double filtered_value, uint32_t sampleIdx, int channel) {
+    // save last spikes occurrence in given channel
+    static std::vector<uint32_t> last_spike_events(cfg.n_channel);
 
+    // After 5 seconds, if the value deviates much from the current standard deviation, a spike is detected
     if(filtered_value < -5 * runningStdDev_calcs[channel]->getStandardDeviation() and sampleIdx > 5*cfg.sampling_rate) {
-        if(!spike_events.empty()) {
-            auto prev_event = spike_events.back();
-            if(sampleIdx > prev_event.timestamp+10 and channel == prev_event.channel) {
-                spike_events.push_back(SpikeEvent(channel,sampleIdx));
-            }if(channel != prev_event.channel) {
-                spike_events.push_back(SpikeEvent(channel,sampleIdx));
-            }
-        }else {
-            // first event
+
+        // if the spike is at least 10 samples after the last spike in this channel
+        if(sampleIdx > last_spike_events[channel]+10) {
             spike_events.push_back(SpikeEvent(channel,sampleIdx));
+            last_spike_events[channel] = sampleIdx;
 
         }
-    };
+    }
 }
 
 std::vector<double> Processing::extract_waveform(SpikeEvent *spike_event,int frame_start, int frame_end, int pos_in_win) {

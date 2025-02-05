@@ -129,12 +129,12 @@ void MainWindow::setupPlot()
             // Create the plot for this channel
             QCustomPlot* plot = new QCustomPlot(ui->spike_waves);
 
-            // add graphs for the past ten spikes
-            for(int i=0; i<10; i++){
+            // add graphs for the past n spikes
+            for(int i=0; i<n_prev_spikes; i++){
                 plot->addGraph();
             }
             // Configure graphs appearance
-            for(int i=0; i<10; i++){
+            for(int i=0; i<n_prev_spikes; i++){
                 plot->graph(i)->setPen(QPen(QColor(255 - 25*i,255 - 25*i,255 - 25*i)));
             }
 
@@ -176,7 +176,6 @@ void MainWindow::realtimeSpikeDataSlot(){
     std::vector<double> timestamps;
     std::vector<std::vector<double>> spike_samples;
     bool spikes_available = false;
-    //static int next = 0;
     static std::vector<int> nexts(n_channel/2);   // placeholder to keep track of last adjusted graph
 
     spikes_available = spike_inlet->pull_chunk(spike_samples, timestamps);
@@ -185,8 +184,7 @@ void MainWindow::realtimeSpikeDataSlot(){
          for(auto& spike : spike_samples){
             for(auto& [spike_plot, channel] : spike_plotChannelMap){
                 if(spike[0] == channel){
-                    if (nexts[channel] >9) nexts[channel] = 0;
-
+                    if (nexts[channel] > n_prev_spikes-1) nexts[channel] = 0;
                     // reset graph
                     spike_plot->graph(nexts[channel])->setPen(QPen(QColor(0, 0, 0)));
                     spike_plot->graph(nexts[channel])->data()->clear();
@@ -205,15 +203,17 @@ void MainWindow::realtimeSpikeDataSlot(){
     }
     else{
         // vanishing of colour
-        /*for(auto& [spike_plot, channel] : spike_plotChannelMap){
-            for(int i=0; i<10;i++){
-                auto b = spike_plot->graph(i)->pen().color().blue();
-                b+=10;
-                if (b>=255) b = 255;
-                spike_plot->graph(i)->setPen(QPen(QColor(b, b, b)));
+       for(auto& [spike_plot, channel] : spike_plotChannelMap){
+            for(int i=0; i<n_prev_spikes;i++){
+                QColor color = spike_plot->graph(i)->pen().color();
+
+                auto alpha = color.alpha() - 20;
+                if (alpha <=0) alpha = 0;
+                color.setAlpha(alpha);
+                spike_plot->graph(i)->setPen(QPen(color));
             }
             spike_plot->replot();
-        }*/
+        }
     }
 }
 
@@ -223,8 +223,8 @@ void MainWindow::realtimeDataSlot()
     std::vector<double> timestamps;
     inlet->pull_chunk(samples, timestamps);
 
-    float minVal = std::numeric_limits<double>::max();
-    float maxVal = std::numeric_limits<double>::lowest();
+    static float minVal = std::numeric_limits<double>::max();
+    static float maxVal = std::numeric_limits<double>::lowest();
     int step_size = 1;
     if(s_rate > 10000){
         step_size = 3;

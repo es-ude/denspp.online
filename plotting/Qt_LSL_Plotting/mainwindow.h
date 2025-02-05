@@ -37,6 +37,7 @@ private:
     std::unique_ptr<lsl::stream_inlet> inlet; // Pointer for the LSL inlet
     std::unique_ptr<lsl::stream_inlet> spike_inlet;
     int n_channel, s_rate;
+    const int n_prev_spikes = 10;
     long samples_received = 0;
     std::vector<QCustomPlot*> plots;
     std::vector<QCustomPlot*> spike_plots;
