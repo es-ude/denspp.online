@@ -128,11 +128,15 @@ void MainWindow::setupPlot()
 
             // Create the plot for this channel
             QCustomPlot* plot = new QCustomPlot(ui->spike_waves);
-            plot->addGraph();
 
-            // Configure graph appearance
-            plot->graph(0)->setPen(QPen(QColor(0, 0, 0)));
-
+            // add graphs for the past ten spikes
+            for(int i=0; i<10; i++){
+                plot->addGraph();
+            }
+            // Configure graphs appearance
+            for(int i=0; i<10; i++){
+                plot->graph(i)->setPen(QPen(QColor(255 - 25*i,255 - 25*i,255 - 25*i)));
+            }
 
             plot->xAxis->setRange(0, 32);  // MAGIC NUMBER!!
             //plot->axisRect()->setupFullAxesBox();
@@ -172,18 +176,26 @@ void MainWindow::realtimeSpikeDataSlot(){
     std::vector<double> timestamps;
     std::vector<std::vector<double>> spike_samples;
     bool spikes_available = false;
+    //static int next = 0;
+    static std::vector<int> nexts(n_channel/2);   // placeholder to keep track of last adjusted graph
 
     spikes_available = spike_inlet->pull_chunk(spike_samples, timestamps);
-
 
     if(spikes_available){
          for(auto& spike : spike_samples){
             for(auto& [spike_plot, channel] : spike_plotChannelMap){
                 if(spike[0] == channel){
-                    spike_plot->graph(0)->data()->clear();
+                    if (nexts[channel] >9) nexts[channel] = 0;
+
+                    // reset graph
+                    spike_plot->graph(nexts[channel])->setPen(QPen(QColor(0, 0, 0)));
+                    spike_plot->graph(nexts[channel])->data()->clear();
+
+                    // add data
                     for(int i=1; i< spike.size(); i++){
-                        spike_plot->graph(0)->addData(i,spike[i]);
+                        spike_plot->graph(nexts[channel])->addData(i-1,spike[i]);
                     }
+                    nexts[channel]++;
                     spike_plot->replot();
                 }else{
 
@@ -191,23 +203,20 @@ void MainWindow::realtimeSpikeDataSlot(){
             }
         }
     }
-
+    else{
+        // vanishing of colour
+        /*for(auto& [spike_plot, channel] : spike_plotChannelMap){
+            for(int i=0; i<10;i++){
+                auto b = spike_plot->graph(i)->pen().color().blue();
+                b+=10;
+                if (b>=255) b = 255;
+                spike_plot->graph(i)->setPen(QPen(QColor(b, b, b)));
+            }
+            spike_plot->replot();
+        }*/
+    }
 }
 
-const std::unordered_map<QCustomPlot *, int> &MainWindow::getSpike_plotChannelMap() const
-{
-    return spike_plotChannelMap;
-}
-
-lsl::stream_inlet*MainWindow::getSpikeInlet() const
-{
-    return spike_inlet.get();
-}
-
-lsl::stream_inlet* MainWindow::getInlet() const
-{
-    return inlet.get();
-}
 void MainWindow::realtimeDataSlot()
 {
     std::vector<std::vector<int>> samples;
